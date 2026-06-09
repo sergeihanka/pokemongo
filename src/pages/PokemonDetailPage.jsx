@@ -332,10 +332,9 @@ export default function PokemonDetailPage() {
       ? { ...pokemon, ...pokemon.megaEvolutions[0] }
       : pokemon
 
-  const stats = displayPokemon.stats || {}
-  const baseAtk = stats.baseAttack || 0
-  const baseDef = stats.baseDefense || 0
-  const baseSta = stats.baseStamina || 0
+  const baseAtk = displayPokemon.baseAttack ?? displayPokemon.stats?.attack ?? 0
+  const baseDef = displayPokemon.baseDefense ?? displayPokemon.stats?.defense ?? 0
+  const baseSta = displayPokemon.baseStamina ?? displayPokemon.stats?.stamina ?? 0
   const maxStatVal = Math.max(baseAtk, baseDef, baseSta, 1)
   const maxCPL40 = calcMaxCP(baseAtk, baseDef, baseSta, 40)
   const maxCPL50 = calcMaxCP(baseAtk, baseDef, baseSta, 50)

@@ -83,25 +83,31 @@ export default function IVAnalysis({
     );
   }
 
+  // Extract flat stat aliases (added by api.js normalization)
+  const baseAtk = pokemon.baseAttack ?? pokemon.stats?.attack ?? 0;
+  const baseDef = pokemon.baseDefense ?? pokemon.stats?.defense ?? 0;
+  const baseSta = pokemon.baseStamina ?? pokemon.stats?.stamina ?? 0;
+  const pokeName = pokemon.names?.English ?? pokemon.name ?? '';
+
   const pct = calculateIVPercentage(ivAtk, ivDef, ivStam);
   const stars = getIVStars(ivAtk, ivDef, ivStam);
 
-  const cpL20 = calculateCP(pokemon, ivAtk, ivDef, ivStam, 20);
-  const cpL30 = calculateCP(pokemon, ivAtk, ivDef, ivStam, 30);
-  const cpL40 = calculateCP(pokemon, ivAtk, ivDef, ivStam, 40);
-  const cpL50 = calculateCP(pokemon, ivAtk, ivDef, ivStam, 50);
+  const cpL20 = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 20);
+  const cpL30 = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 30);
+  const cpL40 = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 40);
+  const cpL50 = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 50);
 
   // PVP optimal levels
-  const glOptimal = findOptimalLevelForCap ? findOptimalLevelForCap(pokemon, ivAtk, ivDef, ivStam, 1500) : null;
-  const ulOptimal = findOptimalLevelForCap ? findOptimalLevelForCap(pokemon, ivAtk, ivDef, ivStam, 2500) : null;
+  const glOptimal = findOptimalLevelForCap(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 1500);
+  const ulOptimal = findOptimalLevelForCap(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 2500);
 
-  // Ratings
-  const gymAtk = getGymAttackerRating ? getGymAttackerRating(pokemon, ivAtk, ivDef, ivStam) : null;
-  const gymDef = getGymDefenderRating ? getGymDefenderRating(pokemon, ivAtk, ivDef, ivStam) : null;
-  const pvp    = getPVPRatings        ? getPVPRatings(pokemon, ivAtk, ivDef, ivStam)         : null;
-  const invest = getInvestRecommendation ? getInvestRecommendation(pokemon, ivAtk, ivDef, ivStam) : null;
+  // Ratings — pass extracted stats, not the whole pokemon object
+  const gymAtk = getGymAttackerRating(pokeName, baseAtk, ivAtk);
+  const gymDef = getGymDefenderRating(pokeName, baseDef, baseSta, ivDef, ivStam);
+  const pvp    = getPVPRatings(pokeName, baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam);
+  const invest = getInvestRecommendation(pokeName, ivAtk, ivDef, ivStam, baseAtk, baseDef, baseSta);
 
-  const investStyle = invest?.recommendation ? INVEST_STYLES[invest.recommendation] ?? '' : '';
+  const investStyle = invest?.verdict ? INVEST_STYLES[invest.verdict] ?? '' : '';
 
   let pctColor = 'text-red-400';
   if (pct >= 98) pctColor = 'text-yellow-400';
@@ -239,11 +245,8 @@ export default function IVAnalysis({
           <div className={`rounded-xl border p-4 ${investStyle}`}>
             <div className="flex items-center gap-3 mb-2">
               <span className="text-2xl font-black tracking-wide">
-                {invest.recommendation}
+                {invest.verdict}
               </span>
-              {invest.label && (
-                <span className="text-sm font-medium opacity-90">{invest.label}</span>
-              )}
             </div>
             {invest.reason && (
               <p className="text-xs opacity-80 leading-relaxed">{invest.reason}</p>

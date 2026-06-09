@@ -32,51 +32,34 @@ function normalizePokemonName(rawName) {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch the full PoGO Pokedex.
- * Returns an array of normalized Pokemon objects.
+ * Fetch the full PoGO Pokedex via the Netlify proxy to avoid CORS issues.
+ * Returns an array that preserves all raw API fields plus adds flat stat aliases.
  */
 export async function fetchPokedex() {
   if (cache.pokedex) return cache.pokedex;
 
-  const { data } = await axios.get(`${POKEDEX_API_BASE}/pokedex.json`);
+  // Use the Netlify function proxy — avoids cross-origin issues in production
+  const { data } = await axios.get('/.netlify/functions/pokemon?action=pokedex');
 
   const normalized = data.map((mon) => ({
-    dexNr: mon.dexNr,
-    id: mon.id ?? String(mon.dexNr),
-    formId: mon.formId ?? null,
-    name: mon.names?.English ?? mon.id ?? String(mon.dexNr),
+    // Spread ALL raw API fields first so every path (names.English, primaryType.names.English, etc.) works
+    ...mon,
+    // Computed additions
     nameNormalized: normalizePokemonName(mon.names?.English ?? ''),
-    primaryType: normalizeTypeName(mon.primaryType?.names?.English ?? mon.primaryType?.type ?? ''),
-    secondaryType: normalizeTypeName(
-      mon.secondaryType?.names?.English ?? mon.secondaryType?.type ?? null
-    ),
-    baseAttack: mon.stats?.baseAttack ?? 0,
-    baseDefense: mon.stats?.baseDefense ?? 0,
-    baseStamina: mon.stats?.baseStamina ?? 0,
-    evolutions: (mon.evolutions ?? []).map((evo) => ({
-      id: evo.id,
-      formId: evo.formId ?? null,
-      name: evo.names?.English ?? evo.id ?? '',
-      candyCost: evo.candyCost ?? 0,
-    })),
+    // Flat stat aliases — API uses attack/defense/stamina (not base*)
+    baseAttack: mon.stats?.attack ?? 0,
+    baseDefense: mon.stats?.defense ?? 0,
+    baseStamina: mon.stats?.stamina ?? 0,
+    // Moves come as objects keyed by ID — convert to arrays
+    quickMoves: Object.values(mon.quickMoves ?? {}),
+    cinematicMoves: Object.values(mon.cinematicMoves ?? {}),
+    // Normalize mega evolution stats too
     megaEvolutions: (mon.megaEvolutions ?? []).map((mega) => ({
-      id: mega.id,
-      name: mega.names?.English ?? mega.id ?? '',
-      baseAttack: mega.stats?.baseAttack ?? 0,
-      baseDefense: mega.stats?.baseDefense ?? 0,
-      baseStamina: mega.stats?.baseStamina ?? 0,
+      ...mega,
+      baseAttack: mega.stats?.attack ?? 0,
+      baseDefense: mega.stats?.defense ?? 0,
+      baseStamina: mega.stats?.stamina ?? 0,
     })),
-    shadowForm: mon.shadowForm
-      ? {
-          baseAttack: mon.shadowForm.stats?.baseAttack ?? null,
-          baseDefense: mon.shadowForm.stats?.baseDefense ?? null,
-          baseStamina: mon.shadowForm.stats?.baseStamina ?? null,
-        }
-      : null,
-    quickMoves: mon.quickMoves ?? [],
-    cinematicMoves: mon.cinematicMoves ?? [],
-    imageUrl: mon.assets?.image ?? null,
-    shinyImageUrl: mon.assets?.shinyImage ?? null,
   }));
 
   cache.pokedex = normalized;
@@ -94,7 +77,7 @@ export async function fetchPokedex() {
 export async function fetchPokemonStats() {
   if (cache.pokemonStats) return cache.pokemonStats;
 
-  const { data } = await axios.get(`${POGO_API_BASE}/pokemon_stats.json`);
+  const { data } = await axios.get('/.netlify/functions/pokemon?action=stats');
 
   // The response is an object keyed by string dex number
   const statsMap = new Map();
@@ -124,8 +107,8 @@ export async function fetchPokemonStats() {
 export async function fetchMoves() {
   if (cache.moves) return cache.moves;
 
-  const { data } = await axios.get(`${POGO_API_BASE}/fast_moves.json`);
-  const { data: chargedData } = await axios.get(`${POGO_API_BASE}/charged_moves.json`);
+  const { data } = await axios.get('/.netlify/functions/pokemon?action=moves');
+  const chargedData = [];
 
   const normMove = (move, type) => ({
     moveId: move.move_id ?? move.id,
@@ -141,10 +124,7 @@ export async function fetchMoves() {
     eps: move.eps ?? null,
   });
 
-  const moves = [
-    ...Object.values(data).map((m) => normMove(m, 'fast')),
-    ...Object.values(chargedData).map((m) => normMove(m, 'charged')),
-  ];
+  const moves = Object.values(data).map((m) => normMove(m, 'fast'));
 
   cache.moves = moves;
   return moves;
@@ -161,7 +141,7 @@ export async function fetchMoves() {
 export async function fetchShinyData() {
   if (cache.shinyData) return cache.shinyData;
 
-  const { data } = await axios.get(`${POGO_API_BASE}/shiny_pokemon.json`);
+  const { data } = await axios.get('/.netlify/functions/pokemon?action=shiny');
 
   // Response shape varies — handle both array and object forms
   const shinySet = new Set();
@@ -186,7 +166,7 @@ export async function fetchShinyData() {
 export async function fetchTypeEffectiveness() {
   if (cache.typeEffectiveness) return cache.typeEffectiveness;
 
-  const { data } = await axios.get(`${POGO_API_BASE}/type_effectiveness.json`);
+  const { data } = await axios.get('/.netlify/functions/pokemon?action=types');
 
   cache.typeEffectiveness = data;
   return data;
@@ -221,7 +201,7 @@ export async function addToCatchCollection(catchData) {
  * @param {Object} updates - Fields to update
  */
 export async function updateCatch(id, updates) {
-  const { data } = await axios.put(`${COLLECTION_ENDPOINT}/${id}`, updates);
+  const { data } = await axios.put(`${COLLECTION_ENDPOINT}?id=${id}`, updates);
   return data;
 }
 
@@ -230,6 +210,6 @@ export async function updateCatch(id, updates) {
  * @param {string} id - The catch document ID
  */
 export async function deleteCatch(id) {
-  const { data } = await axios.delete(`${COLLECTION_ENDPOINT}/${id}`);
+  const { data } = await axios.delete(`${COLLECTION_ENDPOINT}?id=${id}`);
   return data;
 }

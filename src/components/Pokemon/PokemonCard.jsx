@@ -32,8 +32,10 @@ export default function PokemonCard({ pokemon, onClick, isSelected = false, comp
     ? normalizeTypeName(pokemon.secondaryType.names.English)
     : null;
 
-  const { baseAttack = 0, baseDefense = 0, baseStamina = 0 } = pokemon.stats ?? {};
-  const maxCP = calculateMaxCP(pokemon, 40);
+  const baseAttack = pokemon.baseAttack ?? pokemon.stats?.attack ?? 0;
+  const baseDefense = pokemon.baseDefense ?? pokemon.stats?.defense ?? 0;
+  const baseStamina = pokemon.baseStamina ?? pokemon.stats?.stamina ?? 0;
+  const maxCP = calculateMaxCP(baseAttack, baseDefense, baseStamina).level40;
 
   const borderClass = isSelected
     ? 'border-blue-500 ring-1 ring-blue-500/50'
