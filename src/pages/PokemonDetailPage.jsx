@@ -12,20 +12,6 @@ import IVAnalysis from '../components/IV/IVAnalysis'
 
 // ---- helpers ----------------------------------------------------------------
 
-function calcMaxCP(baseAtk, baseDef, baseSta, level = 40) {
-  // CP = (BaseAttack + IVAttack) * sqrt(BaseDefense + IVDefense) * sqrt(BaseStamina + IVStamina) * CPM^2 / 10
-  // Using perfect IVs (15/15/15) and standard CPMs
-  const CPM = {
-    40: 0.7903,
-    50: 0.8403,
-  }
-  const cpm = CPM[level] ?? 0.7903
-  const atk = (baseAtk + 15) * cpm
-  const def = Math.sqrt((baseDef + 15) * cpm * cpm)
-  const sta = Math.sqrt((baseSta + 15) * cpm * cpm)
-  return Math.max(10, Math.floor((atk * def * sta) / 10))
-}
-
 function SkeletonDetail() {
   return (
     <div className="animate-pulse space-y-6">
@@ -277,6 +263,8 @@ export default function PokemonDetailPage() {
 
   const [activeForm, setActiveForm] = useState('normal') // 'normal' | 'shadow' | 'mega'
   const [ivs, setIvs] = useState({ attack: 15, defense: 15, stamina: 15 })
+  const [myLevel, setMyLevel] = useState(40)
+  const [myCPInput, setMyCPInput] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [catchForm, setCatchForm] = useState(BLANK_FORM)
 
@@ -402,12 +390,16 @@ export default function PokemonDetailPage() {
   const cpL40 = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 40)
   const cpL50 = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 50)
   // Max CP (15/15/15) for form comparison
-  const maxCPL40 = calcMaxCP(baseAtk, baseDef, baseSta, 40)
-  const maxCPL50 = calcMaxCP(baseAtk, baseDef, baseSta, 50)
+  const maxCPL40 = calculateCP(baseAtk, baseDef, baseSta, 15, 15, 15, 40)
+  const maxCPL50 = calculateCP(baseAtk, baseDef, baseSta, 15, 15, 15, 50)
   // Effective stats reactive to IVs
-  const effAtk = effectiveAttack(baseAtk, ivs.attack, 40)
-  const effDef = effectiveDefense(baseDef, ivs.defense, 40)
-  const effSta = effectiveStamina(baseSta, ivs.stamina, 40)
+  const effAtk = effectiveAttack(baseAtk, ivs.attack, myLevel)
+  const effDef = effectiveDefense(baseDef, ivs.defense, myLevel)
+  const effSta = effectiveStamina(baseSta, ivs.stamina, myLevel)
+  const maxEffAtk = effectiveAttack(baseAtk, 15, myLevel)
+  const maxEffDef = effectiveDefense(baseDef, 15, myLevel)
+  const maxEffSta = effectiveStamina(baseSta, 15, myLevel)
+  const calcCPAtMyLevel = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, myLevel)
 
   const spriteBase = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon'
   const spriteUrl = activeForm === 'shiny'
@@ -562,28 +554,78 @@ export default function PokemonDetailPage() {
             />
           </div>
 
-          {/* IV-Adjusted Stats — reactive to IVs above */}
           <div className="mt-5 pt-5 border-t border-[#30363D]">
-            <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-3">
-              IV-Adjusted Stats (Lv 40)
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <label className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest whitespace-nowrap">
+                  Level
+                </label>
+                <input
+                  type="number"
+                  min={1} max={50} step={0.5}
+                  value={myLevel}
+                  onChange={e => setMyLevel(Math.min(50, Math.max(1, Number(e.target.value) || 40)))}
+                  className="w-20 bg-[#0D1117] border border-[#30363D] rounded-lg px-2 py-1 text-sm
+                             text-[#C9D1D9] font-mono focus:outline-none focus:border-[#58A6FF]
+                             focus:ring-1 focus:ring-[#58A6FF] text-center"
+                />
+              </div>
+              <div className="flex items-center gap-2 flex-1">
+                <label className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest whitespace-nowrap">
+                  CP
+                </label>
+                <input
+                  type="number"
+                  min={10} max={9999}
+                  value={myCPInput || calcCPAtMyLevel}
+                  onChange={e => setMyCPInput(e.target.value)}
+                  onFocus={e => { if (!myCPInput) setMyCPInput(String(calcCPAtMyLevel)) }}
+                  placeholder={String(calcCPAtMyLevel)}
+                  className="w-24 bg-[#0D1117] border border-[#30363D] rounded-lg px-2 py-1 text-sm
+                             text-[#58A6FF] font-mono focus:outline-none focus:border-[#58A6FF]
+                             focus:ring-1 focus:ring-[#58A6FF] text-center"
+                />
+                <span className="text-[#484F58] text-[10px] whitespace-nowrap">calc: {calcCPAtMyLevel.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-2">
+              IV-Adjusted Stats @ Lv {myLevel}
             </h4>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              {[
-                { label: 'Attack',  base: baseAtk, iv: ivs.attack,  eff: effAtk, color: 'text-orange-400' },
-                { label: 'Defense', base: baseDef, iv: ivs.defense, eff: effDef, color: 'text-blue-400' },
-                { label: 'Stamina', base: baseSta, iv: ivs.stamina, eff: effSta, color: 'text-green-400' },
-              ].map(({ label, base, iv, eff, color }) => (
-                <div key={label} className="bg-[#21262D] rounded-lg p-2">
-                  <p className={`${color} text-xs font-semibold`}>{label}</p>
-                  <p className="text-[#C9D1D9] text-sm font-bold font-mono">{base + iv}</p>
-                  <p className="text-[#8B949E] text-[10px]">
-                    {base} + <span className="text-yellow-400">{iv}</span>
-                  </p>
-                  <p className="text-[#8B949E] text-[10px] mt-0.5">
-                    Eff: <span className="text-[#C9D1D9] font-mono">{eff.toFixed(1)}</span>
-                  </p>
-                </div>
-              ))}
+            <div className="bg-[#0D1117] rounded-lg border border-[#30363D] overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#30363D] bg-[#21262D]/50">
+                    <th className="text-left py-1.5 px-3 text-[#8B949E] font-medium">Stat</th>
+                    <th className="text-center py-1.5 px-3 text-[#8B949E] font-medium">Your IVs</th>
+                    <th className="text-center py-1.5 px-3 text-[#8B949E] font-medium">Max (15/15/15)</th>
+                    <th className="text-center py-1.5 px-3 text-[#8B949E] font-medium">Δ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#30363D]/40">
+                  {[
+                    { label: 'Attack',  yours: effAtk,  max: maxEffAtk,  color: 'text-orange-400', isInt: false },
+                    { label: 'Defense', yours: effDef,  max: maxEffDef,  color: 'text-blue-400',   isInt: false },
+                    { label: 'Stamina', yours: effSta,  max: maxEffSta,  color: 'text-green-400',  isInt: true  },
+                  ].map(({ label, yours, max, color, isInt }) => {
+                    const delta = isInt ? Math.floor(max) - Math.floor(yours) : max - yours
+                    return (
+                      <tr key={label}>
+                        <td className={`py-1.5 px-3 font-semibold ${color}`}>{label}</td>
+                        <td className="py-1.5 px-3 text-center font-mono text-[#C9D1D9]">
+                          {isInt ? Math.floor(yours) : yours.toFixed(1)}
+                        </td>
+                        <td className="py-1.5 px-3 text-center font-mono text-[#58A6FF]">
+                          {isInt ? Math.floor(max) : max.toFixed(1)}
+                        </td>
+                        <td className="py-1.5 px-3 text-center font-mono text-[#484F58] text-[10px]">
+                          {delta > 0 ? `+${isInt ? delta : delta.toFixed(1)}` : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </SectionCard>
@@ -662,8 +704,8 @@ export default function PokemonDetailPage() {
                     return (
                       <tr key={i}>
                         <td className="py-1.5 px-3 text-blue-300 font-medium">⚡ {mName}</td>
-                        <td className="py-1.5 px-3 text-center font-mono text-[#C9D1D9]">{calcMaxCP(mAtk, mDef, mSta, 40).toLocaleString()}</td>
-                        <td className="py-1.5 px-3 text-center font-mono text-[#58A6FF]">{calcMaxCP(mAtk, mDef, mSta, 50).toLocaleString()}</td>
+                        <td className="py-1.5 px-3 text-center font-mono text-[#C9D1D9]">{calculateCP(mAtk, mDef, mSta, 15, 15, 15, 40).toLocaleString()}</td>
+                        <td className="py-1.5 px-3 text-center font-mono text-[#58A6FF]">{calculateCP(mAtk, mDef, mSta, 15, 15, 15, 50).toLocaleString()}</td>
                       </tr>
                     )
                   })}
