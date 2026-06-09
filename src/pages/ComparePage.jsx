@@ -69,12 +69,11 @@ function SlotCard({ slot, index, ivs, onChangeIVs, onRemove, onOpen }) {
     )
   }
 
-  const stats = slot.stats || {}
+  const baseAtk = slot.baseAttack ?? slot.stats?.attack ?? 0
+  const baseDef = slot.baseDefense ?? slot.stats?.defense ?? 0
+  const baseSta = slot.baseStamina ?? slot.stats?.stamina ?? 0
   const pct = ivPercent(ivs.attack, ivs.defense, ivs.stamina)
-  const cp = calcMaxCP(
-    stats.baseAttack, stats.baseDefense, stats.baseStamina,
-    ivs.attack, ivs.defense, ivs.stamina, 40
-  )
+  const cp = calcMaxCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 40)
 
   return (
     <div className="flex-1 min-w-0 bg-[#161B22] border border-[#30363D] rounded-2xl overflow-hidden">
@@ -142,21 +141,11 @@ function SlotCard({ slot, index, ivs, onChangeIVs, onRemove, onOpen }) {
           <StatRow label="CP (L40)" value={cp.toLocaleString()} highlight />
           <StatRow
             label="CP (L50)"
-            value={calcMaxCP(stats.baseAttack, stats.baseDefense, stats.baseStamina,
-              ivs.attack, ivs.defense, ivs.stamina, 50).toLocaleString()}
+            value={calcMaxCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 50).toLocaleString()}
           />
-          <StatRow
-            label="Eff. ATK"
-            value={calcEffectiveAtk(stats.baseAttack, ivs.attack)}
-          />
-          <StatRow
-            label="Eff. DEF"
-            value={calcEffectiveDef(stats.baseDefense, ivs.defense)}
-          />
-          <StatRow
-            label="Eff. STA"
-            value={calcEffectiveSta(stats.baseStamina, ivs.stamina)}
-          />
+          <StatRow label="Eff. ATK" value={calcEffectiveAtk(baseAtk, ivs.attack)} />
+          <StatRow label="Eff. DEF" value={calcEffectiveDef(baseDef, ivs.defense)} />
+          <StatRow label="Eff. STA" value={calcEffectiveSta(baseSta, ivs.stamina)} />
         </div>
       </div>
 

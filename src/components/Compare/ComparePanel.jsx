@@ -173,19 +173,23 @@ export default function ComparePanel({ slots = [], onAddSlot, onRemoveSlot, onCh
   const derived = paddedSlots.map((slot) => {
     if (!slot?.pokemon) return null;
     const { pokemon, ivAtk = 15, ivDef = 15, ivStam = 15 } = slot;
+    const baseAtk = pokemon.baseAttack ?? pokemon.stats?.attack ?? 0;
+    const baseDef = pokemon.baseDefense ?? pokemon.stats?.defense ?? 0;
+    const baseSta = pokemon.baseStamina ?? pokemon.stats?.stamina ?? 0;
+    const pokeName = pokemon.names?.English ?? pokemon.name ?? '';
     return {
-      baseAtk:  pokemon.stats?.baseAttack  ?? 0,
-      baseDef:  pokemon.stats?.baseDefense ?? 0,
-      baseSta:  pokemon.stats?.baseStamina ?? 0,
-      maxCPL40: calculateMaxCP(pokemon, 40),
-      maxCPL50: calculateMaxCP(pokemon, 50),
-      effAtk:   effectiveAttack(pokemon, ivAtk, 40),
-      effDef:   effectiveDefense(pokemon, ivDef, 40),
-      effHp:    effectiveStamina(pokemon, ivStam, 40),
-      cpL40:    calculateCP(pokemon, ivAtk, ivDef, ivStam, 40),
-      gymAtk:   getGymAttackerRating ? getGymAttackerRating(pokemon, ivAtk, ivDef, ivStam) : null,
-      gymDef:   getGymDefenderRating ? getGymDefenderRating(pokemon, ivAtk, ivDef, ivStam) : null,
-      pvp:      getPVPRatings        ? getPVPRatings(pokemon, ivAtk, ivDef, ivStam)         : null,
+      baseAtk,
+      baseDef,
+      baseSta,
+      maxCPL40: calculateMaxCP(baseAtk, baseDef, baseSta).level40,
+      maxCPL50: calculateMaxCP(baseAtk, baseDef, baseSta).level50,
+      effAtk:   effectiveAttack(baseAtk, ivAtk, 40),
+      effDef:   effectiveDefense(baseDef, ivDef, 40),
+      effHp:    effectiveStamina(baseSta, ivStam, 40),
+      cpL40:    calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 40),
+      gymAtk:   getGymAttackerRating(pokeName, baseAtk, ivAtk),
+      gymDef:   getGymDefenderRating(pokeName, baseDef, baseSta, ivDef, ivStam),
+      pvp:      getPVPRatings(pokeName, baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam),
     };
   });
 
