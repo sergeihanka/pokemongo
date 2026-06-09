@@ -1,7 +1,14 @@
 const { connectDB } = require('./_db');
 const axios = require('axios');
 
-const POKEDEX_URL = 'https://pokemon-go-api.github.io/pokemon-go-api/api/pokedex.json';
+// Fastly (GitHub Pages CDN) blocks Lambda IPs at the TLS layer.
+// jsDelivr mirrors the same repo content through a different CDN that Lambda can reach.
+// raw.githubusercontent.com is the second fallback.
+const POKEDEX_URLS = [
+  'https://cdn.jsdelivr.net/gh/pokemon-go-api/pokemon-go-api@main/api/pokedex.json',
+  'https://raw.githubusercontent.com/pokemon-go-api/pokemon-go-api/main/api/pokedex.json',
+  'https://pokemon-go-api.github.io/pokemon-go-api/api/pokedex.json',
+];
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -38,22 +45,29 @@ async function ensureIndexes(collection) {
 async function runSync() {
   // Fetch upstream pokedex
   let entries;
-  try {
-    // axios uses Node's http.request (not the Undici-based fetch) which avoids
-    // the TLS internal_error (alert 80) that Fastly/GitHub Pages returns to
-    // Lambda's native fetch on certain TLS handshakes.
-    const response = await axios.get(POKEDEX_URL, {
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; PoGoIVTracker/1.0)',
-        'Accept': 'application/json',
-      },
-      responseType: 'json',
-    });
-    entries = response.data;
-  } catch (err) {
-    const status = err.response?.status;
-    throw new Error(`Failed to fetch pokedex${status ? ` (HTTP ${status})` : ''}: ${err.message}`);
+  let lastErr;
+  for (const url of POKEDEX_URLS) {
+    try {
+      console.log(`pokedex-sync: trying ${url}`);
+      const response = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; PoGoIVTracker/1.0)',
+          'Accept': 'application/json',
+        },
+        responseType: 'json',
+      });
+      entries = response.data;
+      console.log(`pokedex-sync: fetched ${entries.length} entries from ${url}`);
+      break;
+    } catch (err) {
+      const status = err.response?.status;
+      console.warn(`pokedex-sync: ${url} failed${status ? ` (HTTP ${status})` : ''}: ${err.message}`);
+      lastErr = err;
+    }
+  }
+  if (!entries) {
+    throw new Error(`All pokedex sources failed. Last error: ${lastErr?.message}`);
   }
 
   if (!Array.isArray(entries)) {
