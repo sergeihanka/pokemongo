@@ -372,11 +372,16 @@ export default function PokemonDetailPage() {
   }
 
   const hasShadow = !!pokemon.shadowForm
-  const hasMega = pokemon.megaEvolutions?.length > 0
+  const megaEvolutionsArr = pokemon.megaEvolutions
+    ? Array.isArray(pokemon.megaEvolutions)
+      ? pokemon.megaEvolutions
+      : Object.values(pokemon.megaEvolutions)
+    : []
+  const hasMega = megaEvolutionsArr.length > 0
   const displayPokemon = activeForm === 'shadow' && hasShadow
     ? { ...pokemon, ...pokemon.shadowForm }
     : activeForm === 'mega' && hasMega
-      ? { ...pokemon, ...pokemon.megaEvolutions[0] }
+      ? { ...pokemon, ...megaEvolutionsArr[0] }
       : pokemon
 
   const baseAtk = displayPokemon.baseAttack ?? displayPokemon.stats?.attack ?? 0
@@ -695,12 +700,11 @@ export default function PokemonDetailPage() {
                       <td className="py-1.5 px-3 text-center font-mono text-[#58A6FF]">{maxCPL50.toLocaleString()}</td>
                     </tr>
                   )}
-                  {pokemon.megaEvolutions?.map((mega, i) => {
-                    const mt = mega.pokemon ?? mega
-                    const mAtk = mt.stats?.attack ?? mt.baseAttack ?? baseAtk
-                    const mDef = mt.stats?.defense ?? mt.baseDefense ?? baseDef
-                    const mSta = mt.stats?.stamina ?? mt.baseStamina ?? baseSta
-                    const mName = mt.names?.English ?? `Mega ${pokemon.names?.English}`
+                  {megaEvolutionsArr.map((mega, i) => {
+                    const mAtk = mega.stats?.attack ?? mega.baseAttack ?? baseAtk
+                    const mDef = mega.stats?.defense ?? mega.baseDefense ?? baseDef
+                    const mSta = mega.stats?.stamina ?? mega.baseStamina ?? baseSta
+                    const mName = mega.names?.English ?? `Mega ${pokemon.names?.English}`
                     return (
                       <tr key={i}>
                         <td className="py-1.5 px-3 text-blue-300 font-medium">⚡ {mName}</td>
