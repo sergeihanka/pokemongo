@@ -38,8 +38,9 @@ function normalizePokemonName(rawName) {
 export async function fetchPokedex() {
   if (cache.pokedex) return cache.pokedex;
 
-  // Use the Netlify function proxy — avoids cross-origin issues in production
-  const { data } = await axios.get('/.netlify/functions/pokemon?action=pokedex');
+  // Call the GitHub Pages API directly — it serves Access-Control-Allow-Origin: * so CORS is fine.
+  // Can't proxy through Netlify functions because the JSON is ~6 MB (exceeds the 6 MB response limit).
+  const { data } = await axios.get(`${POKEDEX_API_BASE}/pokedex.json`);
 
   const normalized = data.map((mon) => ({
     // Spread ALL raw API fields first so every path (names.English, primaryType.names.English, etc.) works
