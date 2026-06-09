@@ -119,7 +119,7 @@ async function runSync() {
 }
 
 // Netlify scheduled function handler
-exports.handler = async function (event) {
+const handler = async function (event) {
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS_HEADERS, body: '' };
@@ -147,3 +147,5 @@ exports.handler = async function (event) {
     return jsonResponse(500, { error: err.message });
   }
 };
+
+module.exports = { handler };
