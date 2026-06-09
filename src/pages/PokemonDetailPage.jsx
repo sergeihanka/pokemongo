@@ -2,8 +2,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { usePokemonDetail } from '../hooks/usePokemon'
 import { useAddToCollection, useCollection } from '../hooks/useCollection'
-import { calculateIVPercentage } from '../utils/ivCalculator'
-import PokemonStats from '../components/Pokemon/PokemonStats'
+import { calculateIVPercentage, calculateCP, effectiveAttack, effectiveDefense, effectiveStamina } from '../utils/ivCalculator'
 import TypeBadge from '../components/Pokemon/TypeBadge'
 import RatingBadge from '../components/Pokemon/RatingBadge'
 import StatBar from '../components/Pokemon/StatBar'
@@ -396,8 +395,19 @@ export default function PokemonDetailPage() {
   const baseDef = displayPokemon.baseDefense ?? displayPokemon.stats?.defense ?? 0
   const baseSta = displayPokemon.baseStamina ?? displayPokemon.stats?.stamina ?? 0
   const maxStatVal = Math.max(baseAtk, baseDef, baseSta, 1)
+
+  // Dynamic CP breakpoints — reactive to IV slider changes
+  const cpL20 = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 20)
+  const cpL30 = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 30)
+  const cpL40 = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 40)
+  const cpL50 = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 50)
+  // Max CP (15/15/15) for form comparison
   const maxCPL40 = calcMaxCP(baseAtk, baseDef, baseSta, 40)
   const maxCPL50 = calcMaxCP(baseAtk, baseDef, baseSta, 50)
+  // Effective stats reactive to IVs
+  const effAtk = effectiveAttack(baseAtk, ivs.attack, 40)
+  const effDef = effectiveDefense(baseDef, ivs.defense, 40)
+  const effSta = effectiveStamina(baseSta, ivs.stamina, 40)
 
   const spriteBase = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon'
   const spriteUrl = activeForm === 'shiny'
@@ -530,56 +540,140 @@ export default function PokemonDetailPage() {
           </div>
         </div>
 
-        {/* Max CP bar */}
-        <div className="border-t border-[#30363D] px-6 py-4 bg-[#0D1117]/30 flex gap-8">
-          <div>
-            <p className="text-xs text-[#8B949E] uppercase tracking-wider">Max CP (Lvl 40)</p>
-            <p className="text-2xl font-bold text-[#E6EDF3] mt-0.5">{maxCPL40.toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-xs text-[#8B949E] uppercase tracking-wider">Max CP (Lvl 50)</p>
-            <p className="text-2xl font-bold text-[#58A6FF] mt-0.5">{maxCPL50.toLocaleString()}</p>
-          </div>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Base Stats */}
+        {/* Left: Base Stats + IV Calculator + IV-Adjusted Stats */}
         <SectionCard title="Base Stats">
           <div className="space-y-3">
-            <StatBar
-              label="Attack"
-              value={baseAtk}
-              max={maxStatVal}
-              color="bg-orange-500"
-            />
-            <StatBar
-              label="Defense"
-              value={baseDef}
-              max={maxStatVal}
-              color="bg-blue-500"
-            />
-            <StatBar
-              label="Stamina"
-              value={baseSta}
-              max={maxStatVal}
-              color="bg-green-500"
+            <StatBar label="Attack"  value={baseAtk} max={maxStatVal} color="bg-orange-500" />
+            <StatBar label="Defense" value={baseDef} max={maxStatVal} color="bg-blue-500" />
+            <StatBar label="Stamina" value={baseSta} max={maxStatVal} color="bg-green-500" />
+          </div>
+
+          {/* IV Calculator */}
+          <div className="mt-5 pt-5 border-t border-[#30363D]">
+            <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-3">IV Calculator</h4>
+            <IVInput
+              ivAtk={ivs.attack}
+              ivDef={ivs.defense}
+              ivStam={ivs.stamina}
+              onChange={handleIVChange}
             />
           </div>
-          <div className="mt-4 pt-4 border-t border-[#30363D]">
-            <PokemonStats pokemon={displayPokemon} />
+
+          {/* IV-Adjusted Stats — reactive to IVs above */}
+          <div className="mt-5 pt-5 border-t border-[#30363D]">
+            <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-3">
+              IV-Adjusted Stats (Lv 40)
+            </h4>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[
+                { label: 'Attack',  base: baseAtk, iv: ivs.attack,  eff: effAtk, color: 'text-orange-400' },
+                { label: 'Defense', base: baseDef, iv: ivs.defense, eff: effDef, color: 'text-blue-400' },
+                { label: 'Stamina', base: baseSta, iv: ivs.stamina, eff: effSta, color: 'text-green-400' },
+              ].map(({ label, base, iv, eff, color }) => (
+                <div key={label} className="bg-[#21262D] rounded-lg p-2">
+                  <p className={`${color} text-xs font-semibold`}>{label}</p>
+                  <p className="text-[#C9D1D9] text-sm font-bold font-mono">{base + iv}</p>
+                  <p className="text-[#8B949E] text-[10px]">
+                    {base} + <span className="text-yellow-400">{iv}</span>
+                  </p>
+                  <p className="text-[#8B949E] text-[10px] mt-0.5">
+                    Eff: <span className="text-[#C9D1D9] font-mono">{eff.toFixed(1)}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </SectionCard>
 
-        {/* IV Calculator */}
-        <SectionCard title="IV Calculator">
-          <IVInput
-            ivAtk={ivs.attack}
-            ivDef={ivs.defense}
-            ivStam={ivs.stamina}
-            onChange={handleIVChange}
-          />
-          <div className="mt-4">
+        {/* Right: CP Breakpoints + Form Comparison + Ratings & Recommendation */}
+        <SectionCard title="CP & Analysis">
+          {/* CP Breakpoints — current IVs vs perfect 15/15/15 */}
+          <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-2">CP Breakpoints</h4>
+          <div className="bg-[#0D1117] rounded-lg border border-[#30363D] overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#30363D] bg-[#21262D]/50">
+                  <th className="text-left py-1.5 px-3 text-[#8B949E] font-medium">Level</th>
+                  <th className="text-center py-1.5 px-3 text-[#8B949E] font-medium">Your IVs</th>
+                  <th className="text-center py-1.5 px-3 text-[#8B949E] font-medium">Max (15/15/15)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#30363D]/40">
+                {[
+                  { lv: 20, cp: cpL20, max: calculateCP(baseAtk, baseDef, baseSta, 15, 15, 15, 20) },
+                  { lv: 30, cp: cpL30, max: calculateCP(baseAtk, baseDef, baseSta, 15, 15, 15, 30) },
+                  { lv: 40, cp: cpL40, max: maxCPL40, highlight: true },
+                  { lv: 50, cp: cpL50, max: maxCPL50, label: 'L50 (XL)' },
+                ].map(({ lv, cp, max, highlight, label }) => (
+                  <tr key={lv}>
+                    <td className="py-1.5 px-3 text-[#8B949E]">{label ?? `L${lv}`}</td>
+                    <td className={`py-1.5 px-3 text-center font-mono font-semibold ${highlight ? 'text-yellow-400' : 'text-[#C9D1D9]'}`}>
+                      {cp?.toLocaleString() ?? '—'}
+                    </td>
+                    <td className="py-1.5 px-3 text-center font-mono text-[#58A6FF]">
+                      {max?.toLocaleString() ?? '—'}
+                      {cp != null && max != null && cp < max && (
+                        <span className="text-[#484F58] ml-1 text-[10px]">(+{(max - cp).toLocaleString()})</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Form Max CP comparison — always shown */}
+          <div className="mt-5 pt-5 border-t border-[#30363D]">
+            <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-2">Max CP by Form (15/15/15)</h4>
+            <div className="bg-[#0D1117] rounded-lg border border-[#30363D] overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#30363D] bg-[#21262D]/50">
+                    <th className="text-left py-1.5 px-3 text-[#8B949E] font-medium">Form</th>
+                    <th className="text-center py-1.5 px-3 text-[#8B949E] font-medium">L40</th>
+                    <th className="text-center py-1.5 px-3 text-[#8B949E] font-medium">L50</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#30363D]/40">
+                  <tr>
+                    <td className="py-1.5 px-3 text-[#C9D1D9] font-medium">Normal</td>
+                    <td className="py-1.5 px-3 text-center font-mono text-[#C9D1D9]">{maxCPL40.toLocaleString()}</td>
+                    <td className="py-1.5 px-3 text-center font-mono text-[#58A6FF]">{maxCPL50.toLocaleString()}</td>
+                  </tr>
+                  {hasShadow && (
+                    <tr>
+                      <td className="py-1.5 px-3 text-purple-300 font-medium">
+                        👻 Shadow
+                        <span className="block text-[#484F58] font-normal text-[10px]">+20% ATK / −17% DEF in battle</span>
+                      </td>
+                      <td className="py-1.5 px-3 text-center font-mono text-[#C9D1D9]">{maxCPL40.toLocaleString()}</td>
+                      <td className="py-1.5 px-3 text-center font-mono text-[#58A6FF]">{maxCPL50.toLocaleString()}</td>
+                    </tr>
+                  )}
+                  {pokemon.megaEvolutions?.map((mega, i) => {
+                    const mt = mega.pokemon ?? mega
+                    const mAtk = mt.stats?.attack ?? mt.baseAttack ?? baseAtk
+                    const mDef = mt.stats?.defense ?? mt.baseDefense ?? baseDef
+                    const mSta = mt.stats?.stamina ?? mt.baseStamina ?? baseSta
+                    const mName = mt.names?.English ?? `Mega ${pokemon.names?.English}`
+                    return (
+                      <tr key={i}>
+                        <td className="py-1.5 px-3 text-blue-300 font-medium">⚡ {mName}</td>
+                        <td className="py-1.5 px-3 text-center font-mono text-[#C9D1D9]">{calcMaxCP(mAtk, mDef, mSta, 40).toLocaleString()}</td>
+                        <td className="py-1.5 px-3 text-center font-mono text-[#58A6FF]">{calcMaxCP(mAtk, mDef, mSta, 50).toLocaleString()}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* IVAnalysis — IV score, gym/PVP ratings, recommendation (no CP section) */}
+          <div className="mt-5 pt-5 border-t border-[#30363D]">
             <IVAnalysis
               pokemon={displayPokemon}
               ivAtk={ivs.attack}
@@ -588,25 +682,6 @@ export default function PokemonDetailPage() {
             />
           </div>
         </SectionCard>
-      </div>
-
-      {/* Ratings row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        {[
-          { label: 'Gym Attacker', key: 'gymAttacker' },
-          { label: 'Gym Defender', key: 'gymDefender' },
-          { label: 'Great League', key: 'pvpGreat' },
-          { label: 'Ultra League', key: 'pvpUltra' },
-          { label: 'Master League', key: 'pvpMaster' },
-        ].map(({ label, key }) => (
-          <div
-            key={key}
-            className="bg-[#161B22] border border-[#30363D] rounded-xl p-4 text-center"
-          >
-            <p className="text-xs text-[#8B949E] uppercase tracking-wider mb-2">{label}</p>
-            <RatingBadge rating={displayPokemon[key]} />
-          </div>
-        ))}
       </div>
 
       {/* Moves */}

@@ -92,9 +92,6 @@ export default function IVAnalysis({
   const pct = calculateIVPercentage(ivAtk, ivDef, ivStam);
   const stars = getIVStars(ivAtk, ivDef, ivStam);
 
-  const cpL20 = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 20);
-  const cpL30 = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 30);
-  const cpL40 = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 40);
   const cpL50 = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 50);
 
   // PVP optimal levels
@@ -150,16 +147,6 @@ export default function IVAnalysis({
             <span className="text-yellow-400 text-xs font-medium">Shiny available</span>
           </div>
         )}
-      </Section>
-
-      {/* CP Breakpoints */}
-      <Section title="CP Breakpoints">
-        <div className="bg-[#161B22] rounded-lg border border-[#30363D] px-3 py-1 divide-y divide-[#30363D]/40">
-          <DataRow label="CP @ Level 20"  value={cpL20 != null ? cpL20.toLocaleString() : '—'} />
-          <DataRow label="CP @ Level 30"  value={cpL30 != null ? cpL30.toLocaleString() : '—'} />
-          <DataRow label="CP @ Level 40"  value={cpL40 != null ? cpL40.toLocaleString() : '—'} valueClass="text-yellow-400" />
-          <DataRow label="CP @ Level 50 (XL)" value={cpL50 != null ? cpL50.toLocaleString() : '—'} />
-        </div>
       </Section>
 
       {/* Gym Ratings */}
