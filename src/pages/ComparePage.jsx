@@ -342,17 +342,19 @@ export default function ComparePage() {
   const compRows = useMemo(() => {
     return slots.map((slot, i) => {
       if (!slot) return null
-      const s = slot.stats || {}
       const iv = slotIVs[i]
+      const baseAtk = slot.baseAttack ?? slot.stats?.attack ?? 0
+      const baseDef = slot.baseDefense ?? slot.stats?.defense ?? 0
+      const baseSta = slot.baseStamina ?? slot.stats?.stamina ?? 0
       return {
-        cpL40: calcMaxCP(s.baseAttack, s.baseDefense, s.baseStamina, iv.attack, iv.defense, iv.stamina, 40),
-        cpL50: calcMaxCP(s.baseAttack, s.baseDefense, s.baseStamina, iv.attack, iv.defense, iv.stamina, 50),
-        baseAtk: s.baseAttack,
-        baseDef: s.baseDefense,
-        baseSta: s.baseStamina,
-        effAtk: Number(calcEffectiveAtk(s.baseAttack, iv.attack)),
-        effDef: Number(calcEffectiveDef(s.baseDefense, iv.defense)),
-        effSta: calcEffectiveSta(s.baseStamina, iv.stamina),
+        cpL40: calcMaxCP(baseAtk, baseDef, baseSta, iv.attack, iv.defense, iv.stamina, 40),
+        cpL50: calcMaxCP(baseAtk, baseDef, baseSta, iv.attack, iv.defense, iv.stamina, 50),
+        baseAtk,
+        baseDef,
+        baseSta,
+        effAtk: Number(calcEffectiveAtk(baseAtk, iv.attack)),
+        effDef: Number(calcEffectiveDef(baseDef, iv.defense)),
+        effSta: calcEffectiveSta(baseSta, iv.stamina),
         ivPct: ivPercent(iv.attack, iv.defense, iv.stamina),
         gymAttacker: slot.gymAttacker,
         gymDefender: slot.gymDefender,
@@ -512,6 +514,57 @@ export default function ComparePage() {
                     ))}
                   </tr>
                 ))}
+
+                {/* Best Moves section header */}
+                <tr className="border-b border-[#30363D] bg-[#21262D]">
+                  <td colSpan={4} className="py-2 px-4 text-xs font-semibold text-[#8B949E] uppercase tracking-wider">
+                    Best Moves
+                  </td>
+                </tr>
+
+                {/* Best Fast Move */}
+                <tr className="border-b border-[#30363D] bg-[#21262D]/30">
+                  <td className="py-2.5 px-4 text-xs text-[#8B949E] font-medium whitespace-nowrap">Best Fast Move</td>
+                  {slots.map((slot, i) => {
+                    if (!slot) return <td key={i} className="py-2.5 px-4 text-xs text-[#484F58] text-center">—</td>
+                    const moves = slot.quickMoves
+                    if (!moves || moves.length === 0) return <td key={i} className="py-2.5 px-4 text-xs text-[#484F58] text-center">—</td>
+                    const getName = m => typeof m === 'string' ? m : (m.names?.English ?? m.name ?? '?')
+                    const objs = moves.filter(m => typeof m === 'object' && m !== null && m.power != null && m.durationMs != null)
+                    let label
+                    if (objs.length === 0) {
+                      label = getName(moves[0])
+                    } else {
+                      const sorted = [...objs].sort((a, b) => (b.power / b.durationMs) - (a.power / a.durationMs))
+                      const topDPS = sorted[0].power / sorted[0].durationMs
+                      const top = sorted.filter(m => Math.abs(m.power / m.durationMs - topDPS) < 0.1)
+                      label = top.map(getName).join(' / ')
+                    }
+                    return <td key={i} className="py-2.5 px-4 text-xs text-[#C9D1D9] text-center">{label}</td>
+                  })}
+                </tr>
+
+                {/* Best Charge Move */}
+                <tr className="border-b border-[#30363D]">
+                  <td className="py-2.5 px-4 text-xs text-[#8B949E] font-medium whitespace-nowrap">Best Charge Move</td>
+                  {slots.map((slot, i) => {
+                    if (!slot) return <td key={i} className="py-2.5 px-4 text-xs text-[#484F58] text-center">—</td>
+                    const moves = slot.cinematicMoves
+                    if (!moves || moves.length === 0) return <td key={i} className="py-2.5 px-4 text-xs text-[#484F58] text-center">—</td>
+                    const getName = m => typeof m === 'string' ? m : (m.names?.English ?? m.name ?? '?')
+                    const objs = moves.filter(m => typeof m === 'object' && m !== null && m.power != null)
+                    let label
+                    if (objs.length === 0) {
+                      label = getName(moves[0])
+                    } else {
+                      const sorted = [...objs].sort((a, b) => b.power - a.power)
+                      const topPow = sorted[0].power
+                      const top = sorted.filter(m => Math.abs(m.power - topPow) < 0.1)
+                      label = top.map(getName).join(' / ')
+                    }
+                    return <td key={i} className="py-2.5 px-4 text-xs text-[#C9D1D9] text-center">{label}</td>
+                  })}
+                </tr>
               </tbody>
             </table>
           </div>

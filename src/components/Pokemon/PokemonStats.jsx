@@ -40,7 +40,7 @@ function StatRow({ label, value, sub }) {
  * @param {number} [level]  - Trainer level (default 40)
  */
 export default function PokemonStats({ pokemon, ivAtk = 15, ivDef = 15, ivStam = 15, level = 40 }) {
-  if (!pokemon?.stats) {
+  if (!pokemon) {
     return (
       <div className="text-[#8B949E] text-sm text-center py-8">
         No Pokemon selected.
@@ -48,24 +48,25 @@ export default function PokemonStats({ pokemon, ivAtk = 15, ivDef = 15, ivStam =
     );
   }
 
-  const { baseAttack, baseDefense, baseStamina } = pokemon.stats;
+  const baseAtk = pokemon.baseAttack ?? pokemon.stats?.attack ?? 0;
+  const baseDef = pokemon.baseDefense ?? pokemon.stats?.defense ?? 0;
+  const baseSta = pokemon.baseStamina ?? pokemon.stats?.stamina ?? 0;
 
   // CPs
-  const cpL20  = calculateCP(pokemon, ivAtk, ivDef, ivStam, 20);
-  const cpL30  = calculateCP(pokemon, ivAtk, ivDef, ivStam, 30);
-  const cpL40  = calculateCP(pokemon, ivAtk, ivDef, ivStam, 40);
-  const cpL50  = calculateCP(pokemon, ivAtk, ivDef, ivStam, 50);
-  const cpCurrent = calculateCP(pokemon, ivAtk, ivDef, ivStam, level);
-  const maxCPL40 = calculateMaxCP(pokemon, 40);
-  const maxCPL50 = calculateMaxCP(pokemon, 50);
+  const cpL20  = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 20);
+  const cpL30  = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 30);
+  const cpL40  = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 40);
+  const cpL50  = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, 50);
+  const cpCurrent = calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivStam, level);
+  const maxCP = calculateMaxCP(baseAtk, baseDef, baseSta);
 
   // Effective stats at given level with given IVs
-  const effAtk  = effectiveAttack(pokemon, ivAtk, level);
-  const effDef  = effectiveDefense(pokemon, ivDef, level);
-  const effSta  = effectiveStamina(pokemon, ivStam, level);
+  const effAtk  = effectiveAttack(baseAtk, ivAtk, level);
+  const effDef  = effectiveDefense(baseDef, ivDef, level);
+  const effSta  = effectiveStamina(baseSta, ivStam, level);
 
   // IV impact
-  const impact = getIVImpact(pokemon, ivAtk, ivDef, ivStam);
+  const impact = getIVImpact(baseAtk, baseDef, baseSta, level);
 
   // Base stat maximum for the bar (use a generous cap)
   const maxBarVal = 400;
@@ -75,18 +76,18 @@ export default function PokemonStats({ pokemon, ivAtk = 15, ivDef = 15, ivStam =
       {/* Base Stats */}
       <SectionTitle>Base Stats</SectionTitle>
       <div className="space-y-2">
-        <StatBar label="Attack"  value={baseAttack}  max={maxBarVal} />
-        <StatBar label="Defense" value={baseDefense} max={maxBarVal} />
-        <StatBar label="Stamina" value={baseStamina} max={maxBarVal} />
+        <StatBar label="Attack"  value={baseAtk}  max={maxBarVal} />
+        <StatBar label="Defense" value={baseDef} max={maxBarVal} />
+        <StatBar label="Stamina" value={baseSta} max={maxBarVal} />
       </div>
 
       {/* IV Adjusted */}
       <SectionTitle>IV-Adjusted Stats (Lv {level})</SectionTitle>
       <div className="grid grid-cols-3 gap-2 text-center">
         {[
-          { label: 'Attack',  base: baseAttack,  iv: ivAtk,  eff: effAtk,  color: 'text-red-400' },
-          { label: 'Defense', base: baseDefense, iv: ivDef,  eff: effDef,  color: 'text-blue-400' },
-          { label: 'Stamina', base: baseStamina, iv: ivStam, eff: effSta,  color: 'text-green-400' },
+          { label: 'Attack',  base: baseAtk,  iv: ivAtk,  eff: effAtk,  color: 'text-red-400' },
+          { label: 'Defense', base: baseDef, iv: ivDef,  eff: effDef,  color: 'text-blue-400' },
+          { label: 'Stamina', base: baseSta, iv: ivStam, eff: effSta,  color: 'text-green-400' },
         ].map(({ label, base, iv, eff, color }) => (
           <div key={label} className="bg-[#21262D] rounded-lg p-2">
             <p className={`${color} text-xs font-semibold`}>{label}</p>
@@ -116,8 +117,8 @@ export default function PokemonStats({ pokemon, ivAtk = 15, ivDef = 15, ivStam =
       {/* Max CP */}
       <SectionTitle>Max CP (IV 15/15/15)</SectionTitle>
       <div className="space-y-0.5">
-        <StatRow label="Max CP @ L40" value={maxCPL40 != null ? maxCPL40.toLocaleString() : '—'} />
-        <StatRow label="Max CP @ L50" value={maxCPL50 != null ? maxCPL50.toLocaleString() : '—'} />
+        <StatRow label="Max CP @ L40" value={maxCP?.level40 != null ? maxCP.level40.toLocaleString() : '—'} />
+        <StatRow label="Max CP @ L50" value={maxCP?.level50 != null ? maxCP.level50.toLocaleString() : '—'} />
       </div>
 
       {/* IV Impact */}
@@ -125,28 +126,28 @@ export default function PokemonStats({ pokemon, ivAtk = 15, ivDef = 15, ivStam =
         <>
           <SectionTitle>IV Impact on Stats</SectionTitle>
           <div className="space-y-0.5">
-            {impact.atkImpact != null && (
+            {impact.attack != null && (
               <StatRow
                 label="ATK IV contribution"
-                value={`+${impact.atkImpact.toFixed(1)}%`}
+                value={`+${impact.attack.toFixed(1)}%`}
               />
             )}
-            {impact.defImpact != null && (
+            {impact.defense != null && (
               <StatRow
                 label="DEF IV contribution"
-                value={`+${impact.defImpact.toFixed(1)}%`}
+                value={`+${impact.defense.toFixed(1)}%`}
               />
             )}
-            {impact.staImpact != null && (
+            {impact.stamina != null && (
               <StatRow
                 label="STA IV contribution"
-                value={`+${impact.staImpact.toFixed(1)}%`}
+                value={`+${impact.stamina.toFixed(1)}%`}
               />
             )}
-            {impact.overallImpact != null && (
+            {impact.total != null && (
               <StatRow
                 label="Overall IV bonus"
-                value={`+${impact.overallImpact.toFixed(1)}%`}
+                value={`+${impact.total.toFixed(1)}%`}
               />
             )}
           </div>

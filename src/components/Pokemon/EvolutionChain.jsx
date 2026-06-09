@@ -75,6 +75,33 @@ function LinearChain({ nodes }) {
   );
 }
 
+function MegaEvoItem({ mega, pokemon }) {
+  const [imgErr, setImgErr] = useState(false);
+  const target = mega.pokemon ?? mega;
+  const name = target.names?.English ?? target.name ?? `Mega ${pokemon.names?.English}`;
+
+  return (
+    <div className="flex items-center gap-1">
+      <EvolutionNode evo={pokemon} isBase />
+      <EvoArrow label="Mega" candyCost={mega.megaEnergyRequired ?? mega.megaEnergy} />
+      <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-purple-900/20 border border-purple-700/40 min-w-[80px]">
+        {!imgErr ? (
+          <img
+            src={getSpriteUrl(target.dexNr ?? pokemon.dexNr)}
+            alt={name}
+            className="w-14 h-14 object-contain pixelated"
+            onError={() => setImgErr(true)}
+          />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-purple-900/40 flex items-center justify-center text-2xl">M</div>
+        )}
+        <p className="text-purple-300 text-xs font-semibold text-center leading-tight">{name}</p>
+        <span className="text-purple-400 text-[10px]">MEGA</span>
+      </div>
+    </div>
+  );
+}
+
 /**
  * EvolutionChain — shows evolution stages for a Pokemon.
  *
@@ -183,31 +210,9 @@ export default function EvolutionChain({ pokemon }) {
             Mega Evolutions
           </h4>
           <div className="flex flex-wrap gap-2">
-            {megaEvolutions.map((mega, idx) => {
-              const target = mega.pokemon ?? mega;
-              const name = target.names?.English ?? target.name ?? `Mega ${pokemon.names?.English}`;
-              const [imgErr, setImgErr] = useState(false);
-              return (
-                <div key={idx} className="flex items-center gap-1">
-                  <EvolutionNode evo={pokemon} isBase />
-                  <EvoArrow label="Mega" candyCost={mega.megaEnergyRequired ?? mega.megaEnergy} />
-                  <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-purple-900/20 border border-purple-700/40 min-w-[80px]">
-                    {!imgErr ? (
-                      <img
-                        src={getSpriteUrl(target.dexNr ?? pokemon.dexNr)}
-                        alt={name}
-                        className="w-14 h-14 object-contain pixelated"
-                        onError={() => setImgErr(true)}
-                      />
-                    ) : (
-                      <div className="w-14 h-14 rounded-full bg-purple-900/40 flex items-center justify-center text-2xl">M</div>
-                    )}
-                    <p className="text-purple-300 text-xs font-semibold text-center leading-tight">{name}</p>
-                    <span className="text-purple-400 text-[10px]">MEGA</span>
-                  </div>
-                </div>
-              );
-            })}
+            {megaEvolutions.map((mega, idx) => (
+              <MegaEvoItem key={idx} mega={mega} pokemon={pokemon} />
+            ))}
           </div>
         </div>
       )}

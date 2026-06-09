@@ -4,6 +4,7 @@ const NAV_LINKS = [
   { label: 'Home', to: '/' },
   { label: 'My Collection', to: '/collection' },
   { label: 'Compare', to: '/compare' },
+  { label: 'Tiers', to: '/tiers' },
 ];
 
 export default function Header() {
