@@ -131,27 +131,30 @@ export const LEGENDARY_MYTHICAL = new Set([
 ]);
 
 export function getTierForRole(name, role) {
+  if (!name) return 'C';
   const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
   const tiers = role === 'attacker' ? GYM_ATTACKER_TIERS :
                 role === 'defender' ? GYM_DEFENDER_TIERS : null;
-  if (!tiers) return null;
+  if (!tiers) return 'C';
   for (const [tier, list] of Object.entries(tiers)) {
-    if (list.some(n => cleanName.includes(n) || n.includes(cleanName))) return tier;
+    if (list.includes(cleanName)) return tier;
   }
   return 'C';
 }
 
 export function getPVPTierForLeague(name, league) {
+  if (!name) return null;
   const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
   const leagueData = PVP_TIERS[league];
   if (!leagueData) return null;
   for (const [tier, list] of Object.entries(leagueData)) {
-    if (list.some(n => cleanName.includes(n) || n.includes(cleanName))) return tier;
+    if (list.includes(cleanName)) return tier;
   }
   return null;
 }
 
 export function isLegendaryOrMythical(name) {
+  if (!name) return false;
   const clean = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-  return LEGENDARY_MYTHICAL.has(clean) || [...LEGENDARY_MYTHICAL].some(l => clean.includes(l));
+  return LEGENDARY_MYTHICAL.has(clean);
 }

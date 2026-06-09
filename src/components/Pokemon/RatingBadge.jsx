@@ -19,14 +19,27 @@ const SIZE_CLASSES = {
  * @param {'sm'|'md'|'lg'} [size]
  */
 export default function RatingBadge({ tier, label, size = 'md' }) {
-  const tierUpper = (tier ?? 'C').toUpperCase();
-  const styles = TIER_STYLES[tierUpper] ?? TIER_STYLES.C;
   const sizeClass = SIZE_CLASSES[size] ?? SIZE_CLASSES.md;
+
+  if (!tier) {
+    return (
+      <span
+        className={`inline-flex items-center justify-center rounded border font-bold leading-none
+                    bg-[#21262D] text-[#484F58] border-[#30363D] ${sizeClass}`}
+        title="Not ranked"
+      >
+        —
+      </span>
+    );
+  }
+
+  const tierUpper = tier.toUpperCase();
+  const styles = TIER_STYLES[tierUpper] ?? TIER_STYLES.C;
 
   return (
     <span
       className={`inline-flex items-center gap-1 rounded border font-bold leading-none ${styles} ${sizeClass}`}
-      title={`Tier ${tierUpper}`}
+      title={`${tierUpper}-Tier`}
     >
       <span>{tierUpper}</span>
       {label && (
