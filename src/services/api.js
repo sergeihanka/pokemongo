@@ -1,7 +1,6 @@
 import axios from 'axios';
 
 const POGO_API_BASE = import.meta.env.VITE_POGO_API_BASE || 'https://pogoapi.net/api/v1';
-const POKEDEX_API_BASE = import.meta.env.VITE_POKEDEX_API_BASE || 'https://pokemon-go-api.github.io/pokemon-go-api/api';
 
 // Module-level cache Maps — data is static/rarely changes
 const cache = {
@@ -11,6 +10,9 @@ const cache = {
   shinyData: null,
   typeEffectiveness: null,
 };
+
+// Cache for individual Pokemon detail entries keyed by formId
+const detailCache = new Map();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,39 +34,59 @@ function normalizePokemonName(rawName) {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch the full PoGO Pokedex via the Netlify proxy to avoid CORS issues.
- * Returns an array that preserves all raw API fields plus adds flat stat aliases.
+ * Fetch the slim PoGO Pokedex list from the Netlify function.
+ * Returns an array that preserves all returned fields plus adds flat stat aliases.
+ * Returns [] if the DB has not been seeded yet (HTTP 503).
  */
 export async function fetchPokedex() {
   if (cache.pokedex) return cache.pokedex;
 
-  // Call the GitHub Pages API directly — it serves Access-Control-Allow-Origin: * so CORS is fine.
-  // Can't proxy through Netlify functions because the JSON is ~6 MB (exceeds the 6 MB response limit).
-  const { data } = await axios.get(`${POKEDEX_API_BASE}/pokedex.json`);
+  let data;
+  try {
+    const response = await axios.get('/.netlify/functions/pokemon?action=list', {
+      validateStatus: (status) => status < 600,
+    });
+
+    if (response.status === 503 && response.data?.seeded === false) {
+      // DB not seeded yet — return empty list without caching so next call retries
+      return [];
+    }
+
+    data = response.data;
+  } catch (err) {
+    // Network-level failure — bubble up so React Query can retry
+    throw err;
+  }
 
   const normalized = data.map((mon) => ({
-    // Spread ALL raw API fields first so every path (names.English, primaryType.names.English, etc.) works
+    // Spread all returned fields
     ...mon,
     // Computed additions
     nameNormalized: normalizePokemonName(mon.names?.English ?? ''),
-    // Flat stat aliases — API uses attack/defense/stamina (not base*)
+    // Flat stat aliases
     baseAttack: mon.stats?.attack ?? 0,
     baseDefense: mon.stats?.defense ?? 0,
     baseStamina: mon.stats?.stamina ?? 0,
-    // Moves come as objects keyed by ID — convert to arrays
-    quickMoves: Object.values(mon.quickMoves ?? {}),
-    cinematicMoves: Object.values(mon.cinematicMoves ?? {}),
-    // Normalize mega evolution stats too
-    megaEvolutions: (mon.megaEvolutions ?? []).map((mega) => ({
-      ...mega,
-      baseAttack: mega.stats?.attack ?? 0,
-      baseDefense: mega.stats?.defense ?? 0,
-      baseStamina: mega.stats?.stamina ?? 0,
-    })),
   }));
 
   cache.pokedex = normalized;
   return normalized;
+}
+
+/**
+ * Fetch a single Pokemon's full detail entry by formId.
+ * Results are cached in detailCache.
+ * @param {string} formId - The Pokemon form ID (e.g. "BULBASAUR")
+ */
+export async function fetchPokemonDetail(formId) {
+  if (detailCache.has(formId)) return detailCache.get(formId);
+
+  const { data } = await axios.get(
+    `/.netlify/functions/pokemon?action=detail&formId=${encodeURIComponent(formId)}`
+  );
+
+  detailCache.set(formId, data);
+  return data;
 }
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,9 @@
   node_bundler = "esbuild"
   included_files = ["netlify/functions/**"]
 
+[functions."pokedex-sync"]
+  schedule = "0 3 * * 1"
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   fetchPokedex,
+  fetchPokemonDetail,
   fetchPokemonStats,
   fetchMoves,
   fetchShinyData,
@@ -35,32 +36,42 @@ export function usePokedex() {
 // ---------------------------------------------------------------------------
 
 /**
- * Finds a specific Pokemon by name from the cached Pokedex.
- * Performs a case-insensitive substring match on normalized names.
+ * Fetches full detail for a single Pokemon by name.
+ * First resolves the formId from the cached slim list, then fetches the full
+ * entry via the detail endpoint. Falls back to the slim list entry if the
+ * detail fetch fails.
  * @param {string|null|undefined} name - The Pokemon name to look up
  */
 export function usePokemonDetail(name) {
   return useQuery({
     queryKey: ['pokedex', 'detail', name],
     queryFn: async () => {
-      const pokedex = await fetchPokedex();
       if (!name) return null;
 
       const searchName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
 
-      // Exact match first
-      let match = pokedex.find((p) => p.nameNormalized === searchName);
+      // Step 1: find the slim entry in the cached list to get the formId
+      const pokedex = await fetchPokedex();
 
-      // Fallback: partial match
-      if (!match) {
-        match = pokedex.find(
+      let slimMatch = pokedex.find((p) => p.nameNormalized === searchName);
+
+      if (!slimMatch) {
+        slimMatch = pokedex.find(
           (p) =>
             p.nameNormalized.includes(searchName) ||
             searchName.includes(p.nameNormalized)
         );
       }
 
-      return match ?? null;
+      if (!slimMatch?.formId) return slimMatch ?? null;
+
+      // Step 2: fetch the full detail entry using the formId
+      try {
+        return await fetchPokemonDetail(slimMatch.formId);
+      } catch {
+        // Detail fetch failed — fall back to the slim list entry
+        return slimMatch;
+      }
     },
     enabled: Boolean(name),
     staleTime: POKEDEX_STALE_TIME,
