@@ -1,4 +1,5 @@
 const { connectDB } = require('./_db');
+const axios = require('axios');
 
 const POKEDEX_URL = 'https://pokemon-go-api.github.io/pokemon-go-api/api/pokedex.json';
 
@@ -38,16 +39,21 @@ async function runSync() {
   // Fetch upstream pokedex
   let entries;
   try {
-    const res = await fetch(POKEDEX_URL, {
-      headers: { 'User-Agent': 'PoGoIVTracker/1.0' },
-      signal: AbortSignal.timeout(30000),
+    // axios uses Node's http.request (not the Undici-based fetch) which avoids
+    // the TLS internal_error (alert 80) that Fastly/GitHub Pages returns to
+    // Lambda's native fetch on certain TLS handshakes.
+    const response = await axios.get(POKEDEX_URL, {
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PoGoIVTracker/1.0)',
+        'Accept': 'application/json',
+      },
+      responseType: 'json',
     });
-    if (!res.ok) {
-      throw new Error(`Upstream returned ${res.status} ${res.statusText}`);
-    }
-    entries = await res.json();
+    entries = response.data;
   } catch (err) {
-    throw new Error(`Failed to fetch pokedex: ${err.message}`);
+    const status = err.response?.status;
+    throw new Error(`Failed to fetch pokedex${status ? ` (HTTP ${status})` : ''}: ${err.message}`);
   }
 
   if (!Array.isArray(entries)) {
