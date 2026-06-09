@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { usePokemonDetail } from '../hooks/usePokemon'
-import { useAddToCollection } from '../hooks/useCollection'
+import { useAddToCollection, useCollection } from '../hooks/useCollection'
+import { calculateIVPercentage } from '../utils/ivCalculator'
 import PokemonStats from '../components/Pokemon/PokemonStats'
 import TypeBadge from '../components/Pokemon/TypeBadge'
 import RatingBadge from '../components/Pokemon/RatingBadge'
@@ -65,7 +66,7 @@ function SectionCard({ title, children, className = '' }) {
 }
 
 // Modal for adding to collection
-function AddToCollectionModal({ pokemon, form, onChange, onClose, onSave, isSaving }) {
+function AddToCollectionModal({ pokemon, form, onChange, onClose, onSave, isSaving, duplicateInfo }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
@@ -89,6 +90,19 @@ function AddToCollectionModal({ pokemon, form, onChange, onClose, onSave, isSavi
               ✕
             </button>
           </div>
+
+          {/* Duplicate recommendation banner */}
+          {duplicateInfo && (
+            <div className={`rounded-xl border px-4 py-3 ${duplicateInfo.style}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-bold tracking-wide">{duplicateInfo.verdict}</span>
+                <span className="text-xs opacity-70">
+                  {duplicateInfo.count} existing cop{duplicateInfo.count === 1 ? 'y' : 'ies'}
+                </span>
+              </div>
+              <p className="text-xs opacity-90 leading-relaxed">{duplicateInfo.message}</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
@@ -260,11 +274,57 @@ export default function PokemonDetailPage() {
 
   const { data: pokemon, isLoading, isError } = usePokemonDetail(name)
   const addToCollection = useAddToCollection()
+  const { data: collection = [] } = useCollection()
 
   const [activeForm, setActiveForm] = useState('normal') // 'normal' | 'shadow' | 'mega'
   const [ivs, setIvs] = useState({ attack: 15, defense: 15, stamina: 15 })
   const [showModal, setShowModal] = useState(false)
   const [catchForm, setCatchForm] = useState(BLANK_FORM)
+
+  // IVInput calls onChange('ivAtk'|'ivDef'|'ivStam', value) — map to our state shape
+  const handleIVChange = useCallback((field, value) => {
+    setIvs(prev => ({
+      ...prev,
+      [field === 'ivAtk' ? 'attack' : field === 'ivDef' ? 'defense' : 'stamina']: value,
+    }))
+  }, [])
+
+  // Pre-fill modal IVs from current state, then check for duplicates
+  const handleOpenModal = useCallback(() => {
+    setCatchForm({
+      ...BLANK_FORM,
+      ivAttack: String(ivs.attack),
+      ivDefense: String(ivs.defense),
+      ivStamina: String(ivs.stamina),
+    })
+    setShowModal(true)
+  }, [ivs])
+
+  // Duplicate recommendation — recalculated when modal is open
+  const duplicateInfo = useMemo(() => {
+    if (!showModal || !pokemon) return null
+    const existing = collection.filter(c => c.pokemonId === pokemon.dexNr)
+    if (existing.length === 0) return null
+    const newPct = calculateIVPercentage(ivs.attack, ivs.defense, ivs.stamina)
+    const best = existing.reduce((a, b) =>
+      calculateIVPercentage(a.ivAttack, a.ivDefense, a.ivStamina) >
+      calculateIVPercentage(b.ivAttack, b.ivDefense, b.ivStamina) ? a : b
+    )
+    const bestPct = calculateIVPercentage(best.ivAttack, best.ivDefense, best.ivStamina)
+    if (newPct >= 90 && bestPct >= 90) {
+      return { verdict: 'KEEP BOTH', newPct, bestPct, count: existing.length,
+        message: `Both are over 90% — worth keeping. New: ${newPct.toFixed(1)}%, Best you have: ${bestPct.toFixed(1)}%.`,
+        style: 'border-green-500/40 bg-green-500/10 text-green-300' }
+    }
+    if (newPct > bestPct) {
+      return { verdict: 'REPLACE', newPct, bestPct, count: existing.length,
+        message: `Upgrade! New ${newPct.toFixed(1)}% beats your best ${bestPct.toFixed(1)}%. Consider replacing.`,
+        style: 'border-blue-500/40 bg-blue-500/10 text-blue-300' }
+    }
+    return { verdict: 'KEEP EXISTING', newPct, bestPct, count: existing.length,
+      message: `You already have a ${bestPct.toFixed(1)}% — this one (${newPct.toFixed(1)}%) isn't an upgrade. Transfer for candy?`,
+      style: 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300' }
+  }, [showModal, pokemon, collection, ivs])
 
   const handleFormChange = useCallback((field, value) => {
     setCatchForm(prev => ({ ...prev, [field]: value }))
@@ -445,7 +505,7 @@ export default function PokemonDetailPage() {
             {/* Action buttons */}
             <div className="flex flex-col gap-2 sm:ml-auto self-start">
               <button
-                onClick={() => setShowModal(true)}
+                onClick={handleOpenModal}
                 className="px-4 py-2 bg-[#238636] hover:bg-[#2EA043] text-white rounded-lg
                            text-sm font-medium transition flex items-center gap-2"
               >
@@ -513,9 +573,19 @@ export default function PokemonDetailPage() {
 
         {/* IV Calculator */}
         <SectionCard title="IV Calculator">
-          <IVInput ivs={ivs} onChange={setIvs} />
+          <IVInput
+            ivAtk={ivs.attack}
+            ivDef={ivs.defense}
+            ivStam={ivs.stamina}
+            onChange={handleIVChange}
+          />
           <div className="mt-4">
-            <IVAnalysis pokemon={displayPokemon} ivs={ivs} />
+            <IVAnalysis
+              pokemon={displayPokemon}
+              ivAtk={ivs.attack}
+              ivDef={ivs.defense}
+              ivStam={ivs.stamina}
+            />
           </div>
         </SectionCard>
       </div>
@@ -603,6 +673,7 @@ export default function PokemonDetailPage() {
           onClose={() => setShowModal(false)}
           onSave={handleSaveCatch}
           isSaving={addToCollection.isPending}
+          duplicateInfo={duplicateInfo}
         />
       )}
     </div>

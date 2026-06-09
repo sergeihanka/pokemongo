@@ -57,6 +57,10 @@ function QuickLookupTab() {
   const [selected, setSelected] = useState(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const [ivs, setIvs] = useState({ attack: 15, defense: 15, stamina: 15 })
+  const handleIVChange = (field, value) => setIvs(prev => ({
+    ...prev,
+    [field === 'ivAtk' ? 'attack' : field === 'ivDef' ? 'defense' : 'stamina']: value,
+  }))
 
   const suggestions = useMemo(() => {
     if (!query || query.length < 2) return []
@@ -128,7 +132,12 @@ function QuickLookupTab() {
         </div>
 
         {/* IV inputs */}
-        <IVInput ivs={ivs} onChange={setIvs} />
+        <IVInput
+          ivAtk={ivs.attack}
+          ivDef={ivs.defense}
+          ivStam={ivs.stamina}
+          onChange={handleIVChange}
+        />
       </div>
 
       {/* Analysis output */}
@@ -148,7 +157,12 @@ function QuickLookupTab() {
               </p>
             </div>
           </div>
-          <IVAnalysis pokemon={selected} ivs={ivs} />
+          <IVAnalysis
+            pokemon={selected}
+            ivAtk={ivs.attack}
+            ivDef={ivs.defense}
+            ivStam={ivs.stamina}
+          />
         </div>
       )}
     </div>
