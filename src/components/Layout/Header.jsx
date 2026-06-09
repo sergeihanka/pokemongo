@@ -32,7 +32,7 @@ export default function Header() {
               </svg>
             </div>
             <span className="text-[#C9D1D9] font-bold text-lg tracking-tight group-hover:text-white transition-colors">
-              PoGo IV Tracker
+              PokeGosh
             </span>
           </Link>
 
