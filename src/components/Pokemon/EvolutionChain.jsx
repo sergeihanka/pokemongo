@@ -1,19 +1,25 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ArrowRight } from 'lucide-react';
 import TypeBadge from './TypeBadge.jsx';
 import { normalizeTypeName } from '../../constants/typeColors.js';
+import { usePokedex } from '../../hooks/usePokemon.js';
 
 function getSpriteUrl(dexNr) {
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dexNr}.png`;
 }
 
+function formatPokemonId(id) {
+  if (!id) return 'Unknown';
+  return id.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
 function EvolutionNode({ evo, isBase = false }) {
   const [imgError, setImgError] = useState(false);
-  const name = evo.names?.English ?? evo.name ?? 'Unknown';
+  const name = evo.names?.English ?? evo.name ?? formatPokemonId(evo.formId ?? evo.id);
 
   return (
     <div className={`flex flex-col items-center gap-1 p-2 rounded-lg ${isBase ? 'bg-[#21262D]' : 'bg-[#161B22]'} border border-[#30363D] min-w-[80px]`}>
-      {!imgError ? (
+      {!imgError && evo.dexNr != null ? (
         <img
           src={getSpriteUrl(evo.dexNr)}
           alt={name}
@@ -54,19 +60,13 @@ function EvoArrow({ candyCost, label }) {
   );
 }
 
-/**
- * Renders a single linear chain: base → stage1 → stage2 ...
- */
 function LinearChain({ nodes }) {
   return (
     <div className="flex items-center flex-wrap gap-1">
       {nodes.map((node, idx) => (
         <div key={idx} className="flex items-center gap-1">
           {idx > 0 && (
-            <EvoArrow
-              candyCost={node.candyCost}
-              label={node.condition}
-            />
+            <EvoArrow candyCost={node.candyCost} label={node.condition} />
           )}
           <EvolutionNode evo={node} isBase={idx === 0} />
         </div>
@@ -77,17 +77,18 @@ function LinearChain({ nodes }) {
 
 function MegaEvoItem({ mega, pokemon }) {
   const [imgErr, setImgErr] = useState(false);
-  const target = mega.pokemon ?? mega;
-  const name = target.names?.English ?? target.name ?? `Mega ${pokemon.names?.English}`;
+  const name = mega.names?.English ?? `Mega ${pokemon.names?.English ?? ''}`;
+  const energyCost = mega.energyCost ?? mega.megaEnergyRequired ?? mega.megaEnergy;
+  const imgSrc = mega.assets?.image ?? (pokemon.dexNr != null ? getSpriteUrl(pokemon.dexNr) : null);
 
   return (
     <div className="flex items-center gap-1">
       <EvolutionNode evo={pokemon} isBase />
-      <EvoArrow label="Mega" candyCost={mega.megaEnergyRequired ?? mega.megaEnergy} />
+      <EvoArrow label="Mega" candyCost={energyCost} />
       <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-purple-900/20 border border-purple-700/40 min-w-[80px]">
-        {!imgErr ? (
+        {!imgErr && imgSrc ? (
           <img
-            src={getSpriteUrl(target.dexNr ?? pokemon.dexNr)}
+            src={imgSrc}
             alt={name}
             className="w-14 h-14 object-contain pixelated"
             onError={() => setImgErr(true)}
@@ -104,14 +105,26 @@ function MegaEvoItem({ mega, pokemon }) {
 
 /**
  * EvolutionChain — shows evolution stages for a Pokemon.
- *
- * @param {Object} pokemon  - Pokedex object with evolutions / megaEvolutions arrays
+ * Evolution entries from the API only carry { id, formId, candies, item, quests }.
+ * Names and dexNr are resolved via the cached slim pokedex list.
  */
 export default function EvolutionChain({ pokemon }) {
+  const { data: pokedex = [] } = usePokedex();
+
+  const pokedexByFormId = useMemo(() => {
+    const map = {};
+    for (const p of pokedex) {
+      if (p.formId) map[p.formId] = p;
+    }
+    return map;
+  }, [pokedex]);
+
   if (!pokemon) return null;
 
   const evolutions = pokemon.evolutions ?? [];
-  const megaEvolutions = pokemon.megaEvolutions ?? [];
+  // megaEvolutions comes back as an object keyed by id — normalise to array
+  const rawMegas = pokemon.megaEvolutions ?? {};
+  const megaEvolutions = Array.isArray(rawMegas) ? rawMegas : Object.values(rawMegas);
 
   const hasEvolutions = evolutions.length > 0;
   const hasMegas = megaEvolutions.length > 0;
@@ -124,33 +137,28 @@ export default function EvolutionChain({ pokemon }) {
     );
   }
 
-  /**
-   * Build a tree from the flat evolutions array.
-   * Each evolution entry is expected to have a `pokemon` field (or be the evolved pokemon itself)
-   * plus optional `candyCost` and `condition`/`evolutionItemRequirement`.
-   */
-  const buildChain = (base, evos) => {
-    // Group by which stage they evolve from
-    // Simple approach: treat all evos as branching from the base
-    return evos.map((evo) => {
-      const target = evo.pokemon ?? evo; // allow both shapes
-      return {
-        ...target,
-        candyCost: evo.candyCost ?? evo.candy_cost,
-        condition: evo.evolutionItemRequirement ?? evo.condition ?? null,
-        subEvolutions: target.evolutions ?? [],
-      };
-    });
+  // Enrich a bare evolution entry { id, formId, candies, item } with
+  // names, dexNr, and type from the slim pokedex lookup.
+  const enrichEvo = (evo) => {
+    const key = evo.formId ?? evo.id;
+    const lookup = key ? (pokedexByFormId[key] ?? null) : null;
+    return {
+      ...evo,
+      names: lookup?.names ?? evo.names,
+      dexNr: lookup?.dexNr ?? evo.dexNr,
+      primaryType: lookup?.primaryType ?? evo.primaryType,
+      secondaryType: lookup?.secondaryType ?? evo.secondaryType,
+      // Normalise cost/condition field names (API uses 'candies', not 'candyCost')
+      candyCost: evo.candies ?? evo.candyCost ?? evo.candy_cost,
+      condition: evo.item?.names?.English ?? evo.evolutionItemRequirement ?? evo.condition ?? null,
+    };
   };
 
-  const firstStageEvos = buildChain(pokemon, evolutions);
-
-  // Detect branching: multiple first-stage evolutions = branching chain
+  const firstStageEvos = evolutions.map(enrichEvo);
   const isBranching = firstStageEvos.length > 1;
 
   return (
     <div className="space-y-4">
-      {/* Normal evolutions */}
       {hasEvolutions && (
         <div>
           <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-3">
@@ -158,52 +166,21 @@ export default function EvolutionChain({ pokemon }) {
           </h4>
 
           {isBranching ? (
-            // Branching: base → [branch1, branch2, ...]
             <div className="flex flex-col gap-2">
               {firstStageEvos.map((evo, idx) => (
                 <div key={idx} className="flex items-center gap-1 flex-wrap">
                   <EvolutionNode evo={pokemon} isBase />
                   <EvoArrow candyCost={evo.candyCost} label={evo.condition} />
                   <EvolutionNode evo={evo} />
-                  {/* Sub-evolutions (stage 3) */}
-                  {evo.subEvolutions?.map((sub, sIdx) => {
-                    const subTarget = sub.pokemon ?? sub;
-                    return (
-                      <div key={sIdx} className="flex items-center gap-1">
-                        <EvoArrow candyCost={sub.candyCost ?? sub.candy_cost} label={sub.condition} />
-                        <EvolutionNode evo={subTarget} />
-                      </div>
-                    );
-                  })}
                 </div>
               ))}
             </div>
           ) : (
-            // Linear chain
-            <LinearChain
-              nodes={[
-                pokemon,
-                ...firstStageEvos.map((e) => ({
-                  ...e,
-                  candyCost: e.candyCost,
-                  condition: e.condition,
-                })),
-                // Stage 3 (if any)
-                ...(firstStageEvos[0]?.subEvolutions?.map((sub) => {
-                  const t = sub.pokemon ?? sub;
-                  return {
-                    ...t,
-                    candyCost: sub.candyCost ?? sub.candy_cost,
-                    condition: sub.condition,
-                  };
-                }) ?? []),
-              ]}
-            />
+            <LinearChain nodes={[pokemon, ...firstStageEvos]} />
           )}
         </div>
       )}
 
-      {/* Mega Evolutions */}
       {hasMegas && (
         <div>
           <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-3">
