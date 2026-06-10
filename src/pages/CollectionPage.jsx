@@ -7,6 +7,8 @@ import {
 } from '../hooks/useCollection'
 import { usePokedex } from '../hooks/usePokemon'
 import PokemonTable from '../components/Collection/PokemonTable'
+import AlbumScanner from '../components/Collection/AlbumScanner'
+import { useTrainerLevel } from '../context/TrainerLevelContext.jsx'
 import {
   effectiveAttack,
   effectiveDefense,
@@ -37,18 +39,18 @@ function resizeToBase64(file, maxPx = 1024, quality = 0.85) {
   })
 }
 
-async function scanScreenshot(file) {
+async function scanScreenshot(file, trainerLevel = 40) {
   const image = await resizeToBase64(file)
   const res = await fetch('/api/scan-pokemon', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image, mediaType: 'image/jpeg' }),
+    body: JSON.stringify({ image, mediaType: 'image/jpeg', trainerLevel }),
   })
   if (!res.ok) throw new Error(`Scan failed: ${res.status}`)
   return res.json()
 }
 
-function ScanArea({ onResult, disabled }) {
+function ScanArea({ onResult, disabled, trainerLevel = 40 }) {
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState(null)
   const [preview, setPreview] = useState(null)
@@ -60,7 +62,7 @@ function ScanArea({ onResult, disabled }) {
     setPreview(URL.createObjectURL(file))
     setScanning(true)
     try {
-      const result = await scanScreenshot(file)
+      const result = await scanScreenshot(file, trainerLevel)
       onResult(result)
     } catch (err) {
       setError(err.message || 'Scan failed')
@@ -392,7 +394,7 @@ function CatchForm({ form, onChange, pokedex, isEditMode }) {
   )
 }
 
-function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex, isEditMode }) {
+function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex, isEditMode, trainerLevel }) {
   function handleScanResult(result) {
     if (!result) return
     if (result.pokemonName) {
@@ -414,13 +416,28 @@ function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex,
     if (result.notes)              onChange('notes', result.notes)
   }
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[#161B22] border border-[#30363D] rounded-2xl shadow-2xl
-                      w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="p-6 space-y-5">
-          <div className="flex items-center justify-between">
+    <>
+      {/* Backdrop — desktop only; mobile is full-screen so no backdrop needed */}
+      <div className="hidden sm:block fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Full-screen on mobile, centered dialog on sm+ */}
+      <div className="fixed inset-0 z-[61] flex flex-col sm:items-center sm:justify-center sm:p-4">
+        <div
+          className="bg-[#161B22] flex flex-col w-full h-full
+                     sm:h-auto sm:max-h-[85svh] sm:max-w-md sm:rounded-2xl sm:border sm:border-[#30363D] sm:shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Sticky header */}
+          <div
+            className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-[#30363D]"
+            style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+          >
             <h3 className="text-lg font-bold text-[#E6EDF3]">{title}</h3>
             <button
               onClick={onClose}
@@ -431,18 +448,27 @@ function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex,
             </button>
           </div>
 
-          {!isEditMode && (
-            <ScanArea onResult={handleScanResult} disabled={isSaving} />
-          )}
+          {/* Scrollable body */}
+          <div
+            className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-5"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            {!isEditMode && (
+              <ScanArea onResult={handleScanResult} disabled={isSaving} trainerLevel={trainerLevel} />
+            )}
+            <CatchForm
+              form={form}
+              onChange={onChange}
+              pokedex={pokedex}
+              isEditMode={isEditMode}
+            />
+          </div>
 
-          <CatchForm
-            form={form}
-            onChange={onChange}
-            pokedex={pokedex}
-            isEditMode={isEditMode}
-          />
-
-          <div className="flex gap-3 pt-1">
+          {/* Sticky footer */}
+          <div
+            className="flex-shrink-0 flex gap-3 px-6 py-4 border-t border-[#30363D]"
+            style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+          >
             <button
               onClick={onClose}
               className="flex-1 py-2.5 rounded-lg border border-[#30363D] text-[#8B949E]
@@ -461,7 +487,7 @@ function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex,
           </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -473,8 +499,10 @@ export default function CollectionPage() {
   const addMutation = useAddToCollection()
   const updateMutation = useUpdateCatch()
   const deleteMutation = useDeleteCatch()
+  const [trainerLevel] = useTrainerLevel()
 
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showAlbumScanner, setShowAlbumScanner] = useState(false)
   const [editTarget, setEditTarget] = useState(null)    // caught pokemon object
   const [deleteTarget, setDeleteTarget] = useState(null) // caught pokemon object
   const [addForm, setAddForm] = useState(BLANK_FORM)
@@ -614,6 +642,31 @@ export default function CollectionPage() {
     } catch { /* error handled by hook */ }
   }, [deleteMutation, deleteTarget])
 
+  const handleAlbumImport = useCallback(async (results) => {
+    for (const result of results) {
+      if (!result?.pokemonName) continue
+      const match = pokedex.find(
+        p => p.names?.English?.toLowerCase() === result.pokemonName.toLowerCase()
+      )
+      try {
+        await addMutation.mutateAsync({
+          pokemonId: match?.dexNr ?? 0,
+          pokemonName: result.pokemonName,
+          nickname: result.pokemonName,
+          cp: Number(result.cp) || 0,
+          ivAttack: Number(result.ivAttack) || 0,
+          ivDefense: Number(result.ivDefense) || 0,
+          ivStamina: Number(result.ivStamina) || 0,
+          level: Number(result.level) || 40,
+          isShiny: result.isShiny || false,
+          isShadow: result.isShadow || false,
+          notes: result.notes || '',
+          caughtDate: result.caughtDate || new Date().toISOString(),
+        })
+      } catch { /* continue importing remaining */ }
+    }
+  }, [addMutation, pokedex])
+
   // ---- render ---------------------------------------------------------------
   return (
     <div className="space-y-6">
@@ -623,16 +676,25 @@ export default function CollectionPage() {
           <h1 className="text-2xl font-bold text-[#E6EDF3]">My Collection</h1>
           <p className="text-sm text-[#8B949E] mt-0.5">Track your caught Pokemon and IVs.</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#238636] hover:bg-[#2EA043]
-                     text-white rounded-xl text-sm font-medium transition"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Pokemon
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAlbumScanner(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262D] hover:bg-[#30363D]
+                       border border-[#30363D] text-[#C9D1D9] rounded-xl text-sm font-medium transition"
+          >
+            📸 Scan Album
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#238636] hover:bg-[#2EA043]
+                       text-white rounded-xl text-sm font-medium transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Pokemon
+          </button>
+        </div>
       </div>
 
       {/* Stats overview */}
@@ -756,6 +818,18 @@ export default function CollectionPage() {
         />
       )}
 
+      {/* Album scanner modal */}
+      {showAlbumScanner && (
+        <div className="fixed inset-0 z-[61] bg-[#161B22] flex flex-col">
+          <AlbumScanner
+            collection={collection}
+            pokedex={pokedex}
+            onImport={handleAlbumImport}
+            onClose={() => setShowAlbumScanner(false)}
+          />
+        </div>
+      )}
+
       {/* Add modal */}
       {showAddModal && (
         <CatchModal
@@ -767,6 +841,7 @@ export default function CollectionPage() {
           isSaving={addMutation.isPending}
           pokedex={pokedex}
           isEditMode={false}
+          trainerLevel={trainerLevel}
         />
       )}
 
@@ -781,6 +856,7 @@ export default function CollectionPage() {
           isSaving={updateMutation.isPending}
           pokedex={pokedex}
           isEditMode={true}
+          trainerLevel={trainerLevel}
         />
       )}
 
