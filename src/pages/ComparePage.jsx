@@ -527,7 +527,7 @@ export default function ComparePage() {
                   <td className="py-2.5 px-4 text-xs text-[#8B949E] font-medium whitespace-nowrap">Best Fast Move</td>
                   {slots.map((slot, i) => {
                     if (!slot) return <td key={i} className="py-2.5 px-4 text-xs text-[#484F58] text-center">—</td>
-                    const moves = slot.quickMoves
+                    const moves = Array.isArray(slot.quickMoves) ? slot.quickMoves : Object.values(slot.quickMoves ?? {})
                     if (!moves || moves.length === 0) return <td key={i} className="py-2.5 px-4 text-xs text-[#484F58] text-center">—</td>
                     const getName = m => typeof m === 'string' ? m : (m.names?.English ?? m.name ?? '?')
                     const objs = moves.filter(m => typeof m === 'object' && m !== null && m.power != null && m.durationMs != null)
@@ -549,7 +549,7 @@ export default function ComparePage() {
                   <td className="py-2.5 px-4 text-xs text-[#8B949E] font-medium whitespace-nowrap">Best Charge Move</td>
                   {slots.map((slot, i) => {
                     if (!slot) return <td key={i} className="py-2.5 px-4 text-xs text-[#484F58] text-center">—</td>
-                    const moves = slot.cinematicMoves
+                    const moves = Array.isArray(slot.cinematicMoves) ? slot.cinematicMoves : Object.values(slot.cinematicMoves ?? {})
                     if (!moves || moves.length === 0) return <td key={i} className="py-2.5 px-4 text-xs text-[#484F58] text-center">—</td>
                     const getName = m => typeof m === 'string' ? m : (m.names?.English ?? m.name ?? '?')
                     const objs = moves.filter(m => typeof m === 'object' && m !== null && m.power != null)

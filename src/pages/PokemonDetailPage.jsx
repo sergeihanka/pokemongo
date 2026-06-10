@@ -406,6 +406,10 @@ export default function PokemonDetailPage() {
   const maxEffSta = effectiveStamina(baseSta, 15, myLevel)
   const calcCPAtMyLevel = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, myLevel)
 
+  const toArr = (v) => Array.isArray(v) ? v : Object.values(v ?? {})
+  const quickMovesArr = toArr(pokemon.quickMoves)
+  const cinematicMovesArr = toArr(pokemon.cinematicMoves)
+
   const spriteBase = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon'
   const spriteUrl = activeForm === 'shiny'
     ? `${spriteBase}/shiny/${pokemon.dexNr}.png`
@@ -737,9 +741,9 @@ export default function PokemonDetailPage() {
             <h3 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-2">
               Fast Moves
             </h3>
-            {pokemon.quickMoves?.length > 0 ? (
+            {quickMovesArr.length > 0 ? (
               <ul className="space-y-1">
-                {pokemon.quickMoves.map((move, i) => (
+                {quickMovesArr.map((move, i) => (
                   <li
                     key={i}
                     className="flex items-center gap-2 px-3 py-2 bg-[#21262D] rounded-lg
@@ -758,9 +762,9 @@ export default function PokemonDetailPage() {
             <h3 className="text-xs font-semibold text-[#8B949E] uppercase tracking-wider mb-2">
               Charge Moves
             </h3>
-            {pokemon.cinematicMoves?.length > 0 ? (
+            {cinematicMovesArr.length > 0 ? (
               <ul className="space-y-1">
-                {pokemon.cinematicMoves.map((move, i) => (
+                {cinematicMovesArr.map((move, i) => (
                   <li
                     key={i}
                     className="flex items-center gap-2 px-3 py-2 bg-[#21262D] rounded-lg
