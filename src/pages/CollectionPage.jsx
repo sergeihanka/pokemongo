@@ -7,6 +7,12 @@ import {
 } from '../hooks/useCollection'
 import { usePokedex } from '../hooks/usePokemon'
 import PokemonTable from '../components/Collection/PokemonTable'
+import {
+  effectiveAttack,
+  effectiveDefense,
+  effectiveStamina,
+  calculateCP,
+} from '../utils/ivCalculator'
 
 // ---- screenshot scanner helpers -----------------------------------------------
 
@@ -484,13 +490,53 @@ export default function CollectionPage() {
       collection.reduce((sum, c) => sum + ivPercent(c.ivAttack, c.ivDefense, c.ivStamina), 0) / total
     ).toFixed(1)
 
-    const best = collection.reduce((best, c) => {
-      const pct = ivPercent(c.ivAttack, c.ivDefense, c.ivStamina)
-      return (!best || pct > ivPercent(best.ivAttack, best.ivDefense, best.ivStamina)) ? c : best
+    // Build base stat lookup from pokedex (keyed by dexNr)
+    const baseOf = {}
+    for (const p of pokedex) {
+      if (p.dexNr) baseOf[p.dexNr] = {
+        atk: p.baseAttack ?? 0,
+        def: p.baseDefense ?? 0,
+        sta: p.baseStamina ?? 0,
+      }
+    }
+
+    // Enrich each catch with effective stats at current level and projected to L50
+    const enriched = collection.map(c => {
+      const base = baseOf[c.pokemonId] ?? { atk: 0, def: 0, sta: 0 }
+      const lv = Math.max(1, Math.min(50, Number(c.level) || 20))
+      const ivAtk = Number(c.ivAttack) || 0
+      const ivDef = Number(c.ivDefense) || 0
+      const ivSta = Number(c.ivStamina) || 0
+      return {
+        ...c,
+        base,
+        // Current level effective stats
+        effAtk:  effectiveAttack(base.atk, ivAtk, lv),
+        effBulk: effectiveDefense(base.def, ivDef, lv) * effectiveStamina(base.sta, ivSta, lv),
+        effCP:   calculateCP(base.atk, base.def, base.sta, ivAtk, ivDef, ivSta, lv),
+        // Projected to L50 with same IVs
+        potAtk:  effectiveAttack(base.atk, ivAtk, 50),
+        potBulk: effectiveDefense(base.def, ivDef, 50) * effectiveStamina(base.sta, ivSta, 50),
+        potCP:   calculateCP(base.atk, base.def, base.sta, ivAtk, ivDef, ivSta, 50),
+      }
+    })
+
+    const pick = (arr, scoreFn) => arr.reduce((best, c) => {
+      if (!best) return c
+      return scoreFn(c) > scoreFn(best) ? c : best
     }, null)
 
-    return { total, hundreds, avgIv, best }
-  }, [collection])
+    // Best right now (at their current level)
+    const bestAttacker = pick(enriched, c => c.effAtk)
+    const bestDefender = pick(enriched, c => c.effBulk)
+    const bestRaider   = pick(enriched, c => c.effCP)
+    // Highest potential (projected to L50 with current IVs)
+    const potAttacker  = pick(enriched, c => c.potAtk)
+    const potDefender  = pick(enriched, c => c.potBulk)
+    const potRaider    = pick(enriched, c => c.potCP)
+
+    return { total, hundreds, avgIv, bestAttacker, bestDefender, bestRaider, potAttacker, potDefender, potRaider }
+  }, [collection, pokedex])
 
   // ---- handlers -------------------------------------------------------------
   function handleAddChange(field, value) {
@@ -590,7 +636,7 @@ export default function CollectionPage() {
       </div>
 
       {/* Stats overview */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <StatBadge label="Total Caught" value={stats.total} />
         <StatBadge
           label="Avg IV %"
@@ -602,25 +648,75 @@ export default function CollectionPage() {
           value={stats.hundreds}
           color={stats.hundreds > 0 ? 'text-yellow-400' : 'text-[#E6EDF3]'}
         />
-        <div className="bg-[#21262D] border border-[#30363D] rounded-xl p-4 text-center">
-          <p className="text-xs text-[#8B949E] uppercase tracking-wider mb-1">Best Pokemon</p>
-          {stats.best ? (
-            <div className="flex items-center justify-center gap-2">
-              <img
-                src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${stats.best.pokemonId}.png`}
-                alt=""
-                className="w-8 h-8 object-contain"
-                onError={e => { e.target.style.display = 'none' }}
-              />
-              <span className="text-sm font-semibold text-[#E6EDF3] truncate">
-                {stats.best.nickname || stats.best.pokemonName}
-              </span>
-            </div>
-          ) : (
-            <p className="text-[#484F58] text-sm">—</p>
-          )}
-        </div>
       </div>
+
+      {/* Best per role — two rows */}
+      {(() => {
+        function BestCard({ label, stat, mon, color, badge, statKey }) {
+          const statVal = mon ? (
+            statKey === 'effAtk'  ? `Atk ${mon.effAtk?.toFixed(0)}`
+            : statKey === 'effBulk' ? `Bulk ${(mon.effBulk / 1000).toFixed(0)}k`
+            : statKey === 'effCP'   ? `CP ${mon.effCP?.toLocaleString()}`
+            : statKey === 'potAtk'  ? `Atk ${mon.potAtk?.toFixed(0)}`
+            : statKey === 'potBulk' ? `Bulk ${(mon.potBulk / 1000).toFixed(0)}k`
+            : `CP ${mon.potCP?.toLocaleString()}`
+          ) : null
+          return (
+            <div className={`bg-[#21262D] border ${badge} rounded-xl p-3 flex flex-col items-center gap-1 text-center`}>
+              <p className="text-[10px] text-[#8B949E] uppercase tracking-wider leading-tight">{label}</p>
+              {mon ? (
+                <>
+                  <img
+                    src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${mon.pokemonId}.png`}
+                    alt="" className="w-10 h-10 object-contain"
+                    onError={e => { e.target.style.display = 'none' }}
+                  />
+                  <p className="text-xs font-semibold text-[#E6EDF3] truncate w-full leading-tight">{mon.nickname || mon.pokemonName}</p>
+                  <p className={`text-[10px] font-mono ${color}`}>{statVal}</p>
+                  <p className="text-[9px] text-[#484F58]">Lv{mon.level ?? '?'} · {ivPercent(mon.ivAttack, mon.ivDefense, mon.ivStamina).toFixed(0)}%</p>
+                </>
+              ) : (
+                <p className="text-[#484F58] text-sm mt-2">—</p>
+              )}
+            </div>
+          )
+        }
+
+        const rows = [
+          {
+            heading: 'Best Right Now',
+            hint: 'ranked by effective stats at their current level',
+            cards: [
+              { label: 'Attacker', mon: stats.bestAttacker, color: 'text-orange-400', badge: 'border-orange-500/30 bg-orange-500/5', statKey: 'effAtk' },
+              { label: 'Defender', mon: stats.bestDefender, color: 'text-blue-400',   badge: 'border-blue-500/30 bg-blue-500/5',   statKey: 'effBulk' },
+              { label: 'Raider',   mon: stats.bestRaider,   color: 'text-green-400',  badge: 'border-green-500/30 bg-green-500/5',  statKey: 'effCP' },
+            ],
+          },
+          {
+            heading: 'Highest Potential',
+            hint: 'projected to Level 50 with current IVs',
+            cards: [
+              { label: 'Attacker', mon: stats.potAttacker, color: 'text-orange-400', badge: 'border-orange-500/20 bg-orange-500/5', statKey: 'potAtk' },
+              { label: 'Defender', mon: stats.potDefender, color: 'text-blue-400',   badge: 'border-blue-500/20 bg-blue-500/5',   statKey: 'potBulk' },
+              { label: 'Raider',   mon: stats.potRaider,   color: 'text-green-400',  badge: 'border-green-500/20 bg-green-500/5',  statKey: 'potCP' },
+            ],
+          },
+        ]
+
+        return rows.map(({ heading, hint, cards }) => (
+          <div key={heading} className="space-y-1.5">
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-xs font-semibold text-[#C9D1D9] uppercase tracking-wider">{heading}</h2>
+              <span className="text-[10px] text-[#484F58]">{hint}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {cards.map(c => (
+                <BestCard key={c.label} label={c.label} mon={c.mon} color={c.color} badge={c.badge} statKey={c.statKey} />
+              ))}
+            </div>
+          </div>
+        ))
+      })()}
 
       {/* Loading */}
       {isLoading && (
