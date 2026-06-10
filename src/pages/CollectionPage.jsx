@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   useCollection,
   useAddToCollection,
@@ -579,6 +580,7 @@ export default function CollectionPage() {
   const updateMutation = useUpdateCatch()
   const deleteMutation = useDeleteCatch()
   const [trainerLevel] = useTrainerLevel()
+  const navigate = useNavigate()
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAlbumScanner, setShowAlbumScanner] = useState(false)
@@ -853,6 +855,10 @@ export default function CollectionPage() {
           pokedex={pokedex}
           onEdit={openEdit}
           onDelete={c => setDeleteTarget(c)}
+          onSelect={p => navigate(
+            `/pokemon/${encodeURIComponent(p.pokemonName)}`,
+            { state: { collectionMon: p } }
+          )}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { usePokemonDetail, usePokedex } from '../hooks/usePokemon'
 import { useAddToCollection, useCollection } from '../hooks/useCollection'
 import { calculateIVPercentage, calculateCP, effectiveAttack, effectiveDefense, effectiveStamina } from '../utils/ivCalculator'
@@ -436,6 +436,7 @@ const BLANK_FORM = {
 export default function PokemonDetailPage() {
   const { name } = useParams()
   const navigate = useNavigate()
+  const { state: navState } = useLocation()
 
   const { data: pokemon, isLoading, isError } = usePokemonDetail(name)
   const addToCollection = useAddToCollection()
@@ -451,9 +452,16 @@ export default function PokemonDetailPage() {
     return { atkArr, defArr, staArr }
   }, [pokedex])
 
+  // If navigated from collection, pre-fill that specific mon's IVs and level
+  const collectionMon = navState?.collectionMon ?? null
+
   const [activeForm, setActiveForm] = useState('normal') // 'normal' | 'shadow' | 'mega'
-  const [ivs, setIvs] = useState({ attack: 15, defense: 15, stamina: 15 })
-  const [myLevel, setMyLevel] = useState(40)
+  const [ivs, setIvs] = useState(() => ({
+    attack:  collectionMon?.ivAttack  ?? 15,
+    defense: collectionMon?.ivDefense ?? 15,
+    stamina: collectionMon?.ivStamina ?? 15,
+  }))
+  const [myLevel, setMyLevel] = useState(() => collectionMon?.level ?? 40)
   const [myCPInput, setMyCPInput] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [catchForm, setCatchForm] = useState(BLANK_FORM)
@@ -752,6 +760,17 @@ export default function PokemonDetailPage() {
           {/* IV Calculator */}
           <div className="mt-5 pt-5 border-t border-[#30363D]">
             <h4 className="text-[#8B949E] text-xs font-semibold uppercase tracking-widest mb-3">IV Calculator</h4>
+            {collectionMon && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-[#1F6FEB]/10 border border-[#1F6FEB]/30">
+                <span className="text-[#58A6FF] text-xs">📦</span>
+                <p className="text-xs text-[#58A6FF]">
+                  Showing <strong>{collectionMon.nickname || collectionMon.pokemonName}</strong>
+                  {collectionMon.cp ? ` · CP ${collectionMon.cp.toLocaleString()}` : ''}
+                  {collectionMon.isShiny ? ' ✨' : ''}
+                  {collectionMon.isShadow ? ' 👻' : ''}
+                </p>
+              </div>
+            )}
             <IVInput
               ivAtk={ivs.attack}
               ivDef={ivs.defense}

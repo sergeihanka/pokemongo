@@ -232,8 +232,10 @@ export default function PokemonTable({ collection = [], pokedex = [], onEdit, on
               return (
                 <tr
                   key={p._id}
+                  onClick={() => onSelect?.(p)}
                   className={`border-b border-[#30363D]/50 hover:bg-[#21262D] transition-colors
-                    ${isDupe ? 'border-l-2 border-l-orange-500/40' : ''}`}
+                    ${isDupe ? 'border-l-2 border-l-orange-500/40' : ''}
+                    ${onSelect ? 'cursor-pointer' : ''}`}
                 >
                   {/* Sprite */}
                   <td className="px-3 py-2 w-12">
@@ -323,12 +325,12 @@ export default function PokemonTable({ collection = [], pokedex = [], onEdit, on
                   </td>
 
                   {/* Actions */}
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       {onSelect && (
                         <button
                           onClick={() => onSelect(p)}
-                          title="Add to Compare"
+                          title="View Stats"
                           className="p-1.5 rounded hover:bg-blue-500/20 text-[#8B949E] hover:text-blue-400 transition-colors"
                         >
                           <ArrowRight className="w-3.5 h-3.5" />
