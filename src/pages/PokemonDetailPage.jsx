@@ -5,7 +5,7 @@ import { useAddToCollection, useCollection } from '../hooks/useCollection'
 import { calculateIVPercentage, calculateCP, effectiveAttack, effectiveDefense, effectiveStamina } from '../utils/ivCalculator'
 import TypeBadge from '../components/Pokemon/TypeBadge'
 import RatingBadge from '../components/Pokemon/RatingBadge'
-import StatBar from '../components/Pokemon/StatBar'
+import StatBar, { statPctColor } from '../components/Pokemon/StatBar'
 import EvolutionChain from '../components/Pokemon/EvolutionChain'
 import IVInput from '../components/IV/IVInput'
 import IVAnalysis from '../components/IV/IVAnalysis'
@@ -46,6 +46,172 @@ function SectionCard({ title, children, className = '' }) {
         {title}
       </h2>
       {children}
+    </div>
+  )
+}
+
+// ---- Stat distribution modal ------------------------------------------------
+
+const STAT_ACCENT = { Attack: '#f97316', Defense: '#3b82f6', Stamina: '#22c55e' }
+const LADDER_CHECKPOINTS = [10, 25, 50, 75, 90, 95, 99]
+const NUM_BUCKETS = 28
+
+function lerp(sortedValues, p) {
+  const n = sortedValues.length
+  if (!n) return 0
+  const idx = (p / 100) * (n - 1)
+  const lo = Math.floor(idx)
+  const hi = Math.ceil(idx)
+  return Math.round(sortedValues[lo] + (sortedValues[hi] - sortedValues[lo]) * (idx - lo))
+}
+
+function StatDistributionModal({ label, value, percentile, sortedValues, onClose }) {
+  const accent = STAT_ACCENT[label] ?? '#1F6FEB'
+  const minVal = sortedValues[0] ?? 0
+  const maxVal = sortedValues[sortedValues.length - 1] ?? 1
+  const bucketSize = (maxVal - minVal) / NUM_BUCKETS || 1
+
+  const buckets = useMemo(() => {
+    const b = new Array(NUM_BUCKETS).fill(0)
+    for (const v of sortedValues) {
+      b[Math.min(NUM_BUCKETS - 1, Math.floor((v - minVal) / bucketSize))]++
+    }
+    return b
+  }, [sortedValues, minVal, bucketSize])
+
+  const maxCount = Math.max(...buckets, 1)
+  const currentBucket = Math.min(NUM_BUCKETS - 1, Math.floor((value - minVal) / bucketSize))
+  const valueXPct = Math.max(2, Math.min(98, ((value - minVal) / (maxVal - minVal || 1)) * 100))
+
+  // Build percentile ladder with current Pokémon inserted at its exact position
+  const rows = useMemo(() => {
+    const result = []
+    let inserted = false
+    for (const cp of LADDER_CHECKPOINTS) {
+      const v = lerp(sortedValues, cp)
+      if (!inserted && percentile <= cp) {
+        if (percentile < cp) result.push({ pct: percentile, val: value, isCurrent: true })
+        else result.push({ pct: cp, val: v, isCurrent: true }) // exactly on checkpoint
+        inserted = true
+        if (percentile === cp) continue
+      }
+      result.push({ pct: cp, val: v })
+    }
+    if (!inserted) result.push({ pct: percentile, val: value, isCurrent: true })
+    result.push({ pct: null, val: maxVal, label: 'Max' })
+    return result
+  }, [sortedValues, percentile, value, maxVal])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-[#161B22] border border-[#30363D] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-5 space-y-5">
+
+          {/* Header */}
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-base font-bold text-[#E6EDF3]">{label}</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-2xl font-mono font-bold text-[#C9D1D9]">{value}</span>
+                <span className={`text-sm font-semibold ${statPctColor(percentile)}`}>
+                  {percentile}th percentile
+                </span>
+              </div>
+              <p className="text-[10px] text-[#484F58] mt-0.5">{sortedValues.length} Pokémon compared</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[#8B949E] hover:text-[#C9D1D9] hover:bg-[#21262D] transition"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Histogram */}
+          <div>
+            <p className="text-[10px] font-semibold text-[#8B949E] uppercase tracking-widest mb-2">
+              Distribution across all Pokémon
+            </p>
+            <div className="bg-[#0D1117] rounded-lg px-2 pt-2 pb-1">
+              <div className="flex items-end gap-px h-14">
+                {buckets.map((count, i) => (
+                  <div
+                    key={i}
+                    className="flex-1 rounded-sm"
+                    style={{
+                      height: `${(count / maxCount) * 100}%`,
+                      minHeight: count > 0 ? 2 : 0,
+                      backgroundColor: i === currentBucket ? accent : '#30363D',
+                      opacity: i === currentBucket ? 1 : 0.65,
+                    }}
+                  />
+                ))}
+              </div>
+              {/* Position marker */}
+              <div className="relative h-4 mt-0.5">
+                <span className="absolute text-[10px] text-[#8B949E] -translate-x-1/2"
+                  style={{ left: `${valueXPct}%` }}>
+                  ▲ {value}
+                </span>
+              </div>
+              <div className="flex justify-between text-[10px] text-[#484F58] mt-0.5">
+                <span>{minVal}</span>
+                <span>{maxVal}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Percentile ladder */}
+          <div>
+            <p className="text-[10px] font-semibold text-[#8B949E] uppercase tracking-widest mb-2">
+              Percentile breakdown — gaps show how far apart tiers are
+            </p>
+            <div className="rounded-lg border border-[#30363D] overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-[#21262D]/50 border-b border-[#30363D]">
+                    <th className="text-left   py-1.5 px-3 text-[#8B949E] font-medium">Percentile</th>
+                    <th className="text-center py-1.5 px-3 text-[#8B949E] font-medium">Stat</th>
+                    <th className="text-right  py-1.5 px-3 text-[#8B949E] font-medium">Gap ↑</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => {
+                    const next = rows[i + 1]
+                    const gap = next ? next.val - row.val : null
+                    // Color large gaps to make them visually prominent
+                    const gapColor = gap == null ? '' : gap >= 25 ? 'text-yellow-400' : gap >= 12 ? 'text-[#C9D1D9]' : 'text-[#6b7280]'
+                    return (
+                      <tr
+                        key={i}
+                        className={`border-b border-[#30363D]/40 last:border-0 ${row.isCurrent ? 'bg-blue-900/20' : ''}`}
+                      >
+                        <td className={`py-1.5 px-3 font-semibold ${row.isCurrent ? 'text-blue-400' : 'text-[#8B949E]'}`}>
+                          {row.label ?? `${row.pct}th`}
+                          {row.isCurrent && <span className="ml-1 font-bold">◀</span>}
+                        </td>
+                        <td className={`py-1.5 px-3 text-center font-mono font-semibold ${row.isCurrent ? 'text-blue-300' : 'text-[#C9D1D9]'}`}>
+                          {row.val}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono">
+                          {gap != null && gap > 0
+                            ? <span className={gapColor}>+{gap}</span>
+                            : <span className="text-[#484F58]">—</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
   )
 }
@@ -291,6 +457,7 @@ export default function PokemonDetailPage() {
   const [myCPInput, setMyCPInput] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [catchForm, setCatchForm] = useState(BLANK_FORM)
+  const [statModal, setStatModal] = useState(null) // { label, value, percentile, sortedValues }
 
   // IVInput calls onChange('ivAtk'|'ivDef'|'ivStam', value) — map to our state shape
   const handleIVChange = useCallback((field, value) => {
@@ -574,9 +741,12 @@ export default function PokemonDetailPage() {
         {/* Left: Base Stats + IV Calculator + IV-Adjusted Stats */}
         <SectionCard title="Base Stats">
           <div className="space-y-3">
-            <StatBar label="Attack"  value={baseAtk} barPercent={atkPct} color="bg-orange-500" percentile={atkPct} />
-            <StatBar label="Defense" value={baseDef} barPercent={defPct} color="bg-blue-500"   percentile={defPct} />
-            <StatBar label="Stamina" value={baseSta} barPercent={staPct} color="bg-green-500"  percentile={staPct} />
+            <StatBar label="Attack"  value={baseAtk} barPercent={atkPct} color="bg-orange-500" percentile={atkPct}
+              onClick={atkPct != null ? () => setStatModal({ label: 'Attack',  value: baseAtk, percentile: atkPct, sortedValues: statSortedArrays.atkArr }) : undefined} />
+            <StatBar label="Defense" value={baseDef} barPercent={defPct} color="bg-blue-500"   percentile={defPct}
+              onClick={defPct != null ? () => setStatModal({ label: 'Defense', value: baseDef, percentile: defPct, sortedValues: statSortedArrays.defArr }) : undefined} />
+            <StatBar label="Stamina" value={baseSta} barPercent={staPct} color="bg-green-500"  percentile={staPct}
+              onClick={staPct != null ? () => setStatModal({ label: 'Stamina', value: baseSta, percentile: staPct, sortedValues: statSortedArrays.staArr }) : undefined} />
           </div>
 
           {/* IV Calculator */}
@@ -813,6 +983,14 @@ export default function PokemonDetailPage() {
       <SectionCard title="Evolution Chain">
         <EvolutionChain pokemon={pokemon} />
       </SectionCard>
+
+      {/* Stat distribution modal */}
+      {statModal && (
+        <StatDistributionModal
+          {...statModal}
+          onClose={() => setStatModal(null)}
+        />
+      )}
 
       {/* Add to collection modal */}
       {showModal && (

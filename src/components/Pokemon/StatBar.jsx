@@ -16,7 +16,7 @@ function resolveColor(label, explicitColor) {
   return LABEL_COLOR_MAP[key] ?? 'bg-[#1F6FEB]';
 }
 
-function pctColor(pct) {
+export function statPctColor(pct) {
   if (pct >= 75) return 'text-green-400';
   if (pct >= 50) return 'text-[#58A6FF]';
   if (pct >= 25) return 'text-yellow-500';
@@ -25,23 +25,30 @@ function pctColor(pct) {
 
 /**
  * StatBar — horizontal bar showing a stat value relative to a max.
- * @param {string}  label
- * @param {number}  value
- * @param {number}  [max=400]
- * @param {string}  [color]        - Tailwind bg class. Auto-detected from label if omitted.
- * @param {boolean} [animate]      - Whether to animate the bar on mount (default true).
- * @param {number}  [percentile]   - Optional 0-100 percentile rank shown after the value.
- * @param {number}  [barPercent]   - If provided, directly sets bar fill % (overrides value/max).
- *                                   Use this to keep bar visually consistent with a percentile.
+ * @param {string}    label
+ * @param {number}    value
+ * @param {number}    [max=400]
+ * @param {string}    [color]       - Tailwind bg class. Auto-detected from label if omitted.
+ * @param {boolean}   [animate]     - Animate bar on mount (default true).
+ * @param {number}    [percentile]  - Cross-Pokémon percentile rank shown after the value.
+ * @param {number}    [barPercent]  - If set, directly controls bar fill % (overrides value/max).
+ * @param {Function}  [onClick]     - If set, renders as a button with hover state.
  */
-export default function StatBar({ label, value, max = 400, color, animate = true, percentile, barPercent }) {
+export default function StatBar({ label, value, max = 400, color, animate = true, percentile, barPercent, onClick }) {
   const barColor = useMemo(() => resolveColor(label, color), [label, color]);
   const pct = barPercent != null
     ? Math.min(100, Math.max(0, barPercent))
     : Math.min(100, Math.max(0, (value / max) * 100));
 
+  const Tag = onClick ? 'button' : 'div';
+
   return (
-    <div className="flex items-center gap-2 w-full">
+    <Tag
+      onClick={onClick}
+      className={`flex items-center gap-2 w-full text-left ${
+        onClick ? 'group cursor-pointer hover:opacity-80 active:opacity-70 transition-opacity' : ''
+      }`}
+    >
       {/* Label */}
       <span className="text-[#8B949E] text-xs w-20 flex-shrink-0 truncate">{label}</span>
 
@@ -64,10 +71,21 @@ export default function StatBar({ label, value, max = 400, color, animate = true
 
       {/* Percentile badge */}
       {percentile != null && (
-        <span className={`text-[10px] font-medium flex-shrink-0 w-7 text-right ${pctColor(percentile)}`}>
+        <span className={`text-[10px] font-medium flex-shrink-0 w-7 text-right ${statPctColor(percentile)}`}>
           {percentile}th
         </span>
       )}
-    </div>
+
+      {/* Clickable hint */}
+      {onClick && (
+        <svg
+          className="w-3 h-3 text-[#484F58] group-hover:text-[#8B949E] flex-shrink-0 transition-colors"
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      )}
+    </Tag>
   );
 }
