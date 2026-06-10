@@ -63,7 +63,7 @@ function SortIcon({ active, dir }) {
  * @param {Function} onDelete  - (id) => void
  * @param {Function} onSelect  - (pokemon) => void  (for compare)
  */
-export default function PokemonTable({ pokemon = [], onEdit, onDelete, onSelect }) {
+export default function PokemonTable({ collection = [], onEdit, onDelete, onSelect }) {
   const [filter, setFilter] = useState('');
   const [sortField, setSortField] = useState('cp');
   const [sortDir, setSortDir] = useState('desc');
@@ -78,19 +78,19 @@ export default function PokemonTable({ pokemon = [], onEdit, onDelete, onSelect 
   };
 
   const rows = useMemo(() => {
-    let data = pokemon.map((p) => ({
+    let data = collection.map((p) => ({
       ...p,
       ivPct: calculateIVPercentage(p.ivAttack, p.ivDefense, p.ivStamina),
       stars: getIVStars(p.ivAttack, p.ivDefense, p.ivStamina),
     }));
 
     if (filter.trim()) {
-      const q = filter.toLowerCase();
+      const q = filter.toLowerCase()
       data = data.filter(
         (p) =>
           (p.pokemonName ?? '').toLowerCase().includes(q) ||
           (p.nickname ?? '').toLowerCase().includes(q),
-      );
+      )
     }
 
     data.sort((a, b) => {
@@ -256,7 +256,7 @@ export default function PokemonTable({ pokemon = [], onEdit, onDelete, onSelect 
 
                   {/* Actions */}
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1">
                       {onSelect && (
                         <button
                           onClick={() => onSelect(p)}
@@ -270,18 +270,18 @@ export default function PokemonTable({ pokemon = [], onEdit, onDelete, onSelect 
                         <button
                           onClick={() => onEdit(p)}
                           title="Edit"
-                          className="p-1.5 rounded hover:bg-[#30363D] text-[#8B949E] hover:text-[#C9D1D9] transition-colors"
+                          className="p-1.5 rounded hover:bg-[#30363D] text-[#484F58] hover:text-[#C9D1D9] transition-colors"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-4 h-4" />
                         </button>
                       )}
                       {onDelete && (
                         <button
-                          onClick={() => onDelete(p._id)}
+                          onClick={() => onDelete(p)}
                           title="Delete"
-                          className="p-1.5 rounded hover:bg-red-500/20 text-[#8B949E] hover:text-red-400 transition-colors"
+                          className="p-1.5 rounded hover:bg-red-500/20 text-[#484F58] hover:text-red-400 transition-colors"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>

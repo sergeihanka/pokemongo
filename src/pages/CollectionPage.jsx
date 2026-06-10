@@ -484,12 +484,18 @@ export default function CollectionPage() {
       collection.reduce((sum, c) => sum + ivPercent(c.ivAttack, c.ivDefense, c.ivStamina), 0) / total
     ).toFixed(1)
 
-    const best = collection.reduce((best, c) => {
-      const pct = ivPercent(c.ivAttack, c.ivDefense, c.ivStamina)
-      return (!best || pct > ivPercent(best.ivAttack, best.ivDefense, best.ivStamina)) ? c : best
+    // Best for each role — pick top IV in the relevant stat(s), break ties by CP
+    const pick = (scoreFn) => collection.reduce((best, c) => {
+      if (!best) return c
+      const sA = scoreFn(c), sB = scoreFn(best)
+      return sA > sB || (sA === sB && (c.cp ?? 0) > (best.cp ?? 0)) ? c : best
     }, null)
 
-    return { total, hundreds, avgIv, best }
+    const bestAttacker = pick(c => c.ivAttack ?? 0)
+    const bestDefender = pick(c => (c.ivDefense ?? 0) + (c.ivStamina ?? 0))
+    const bestRaider   = pick(c => ivPercent(c.ivAttack, c.ivDefense, c.ivStamina))
+
+    return { total, hundreds, avgIv, bestAttacker, bestDefender, bestRaider }
   }, [collection])
 
   // ---- handlers -------------------------------------------------------------
@@ -590,7 +596,7 @@ export default function CollectionPage() {
       </div>
 
       {/* Stats overview */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <StatBadge label="Total Caught" value={stats.total} />
         <StatBadge
           label="Avg IV %"
@@ -602,24 +608,37 @@ export default function CollectionPage() {
           value={stats.hundreds}
           color={stats.hundreds > 0 ? 'text-yellow-400' : 'text-[#E6EDF3]'}
         />
-        <div className="bg-[#21262D] border border-[#30363D] rounded-xl p-4 text-center">
-          <p className="text-xs text-[#8B949E] uppercase tracking-wider mb-1">Best Pokemon</p>
-          {stats.best ? (
-            <div className="flex items-center justify-center gap-2">
-              <img
-                src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${stats.best.pokemonId}.png`}
-                alt=""
-                className="w-8 h-8 object-contain"
-                onError={e => { e.target.style.display = 'none' }}
-              />
-              <span className="text-sm font-semibold text-[#E6EDF3] truncate">
-                {stats.best.nickname || stats.best.pokemonName}
-              </span>
-            </div>
-          ) : (
-            <p className="text-[#484F58] text-sm">—</p>
-          )}
-        </div>
+      </div>
+
+      {/* Best per role */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Best Attacker', sub: 'ATK IV', mon: stats.bestAttacker, color: 'text-orange-400', badge: 'border-orange-500/30 bg-orange-500/5' },
+          { label: 'Best Defender', sub: 'DEF+STA', mon: stats.bestDefender, color: 'text-blue-400',   badge: 'border-blue-500/30 bg-blue-500/5'   },
+          { label: 'Best Raider',   sub: 'IV%',    mon: stats.bestRaider,   color: 'text-green-400',  badge: 'border-green-500/30 bg-green-500/5'  },
+        ].map(({ label, sub, mon, color, badge }) => (
+          <div key={label} className={`bg-[#21262D] border ${badge} rounded-xl p-3 flex flex-col items-center gap-1.5 text-center`}>
+            <p className="text-[10px] text-[#8B949E] uppercase tracking-wider leading-tight">{label}</p>
+            <p className={`text-[10px] ${color} font-semibold leading-none`}>{sub}</p>
+            {mon ? (
+              <>
+                <img
+                  src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${mon.pokemonId}.png`}
+                  alt="" className="w-10 h-10 object-contain"
+                  onError={e => { e.target.style.display = 'none' }}
+                />
+                <p className="text-xs font-semibold text-[#E6EDF3] truncate w-full">{mon.nickname || mon.pokemonName}</p>
+                <p className={`text-[10px] font-mono ${color}`}>
+                  {label === 'Best Attacker' ? `ATK ${mon.ivAttack}/15`
+                    : label === 'Best Defender' ? `${mon.ivDefense}/${mon.ivStamina}`
+                    : `${ivPercent(mon.ivAttack, mon.ivDefense, mon.ivStamina).toFixed(1)}%`}
+                </p>
+              </>
+            ) : (
+              <p className="text-[#484F58] text-sm">—</p>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Loading */}
