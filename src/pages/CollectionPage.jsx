@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   useCollection,
   useAddToCollection,
@@ -174,10 +174,16 @@ function StatBadge({ label, value, color = 'text-[#E6EDF3]' }) {
 }
 
 function DeleteConfirmModal({ name, onConfirm, onCancel, isDeleting }) {
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative bg-[#161B22] border border-[#F85149]/50 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+    <>
+      <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm" onClick={onCancel} />
+      <div className="fixed inset-0 z-[61] flex items-center justify-center p-4 pointer-events-none">
+      <div className="pointer-events-auto bg-[#161B22] border border-[#F85149]/50 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
         <h3 className="text-base font-bold text-[#E6EDF3]">Confirm Delete</h3>
         <p className="text-sm text-[#8B949E]">
           Are you sure you want to remove <span className="text-[#C9D1D9] font-medium">{name}</span> from your collection? This cannot be undone.
@@ -199,8 +205,9 @@ function DeleteConfirmModal({ name, onConfirm, onCancel, isDeleting }) {
             {isDeleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -414,56 +421,69 @@ function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex,
     if (result.notes)              onChange('notes', result.notes)
   }
 
+  // Lock background scroll while open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-full items-end justify-center p-4 sm:items-center">
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-[#161B22] border border-[#30363D] rounded-2xl shadow-2xl
-                        w-full max-w-md">
+    <>
+      {/* Backdrop — z-[60] sits above bottom nav (z-50) */}
+      <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Sheet — separate layer above backdrop so its scroll isn't blocked */}
+      <div className="fixed inset-x-0 bottom-0 z-[61] sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4">
+        <div
+          className="bg-[#161B22] border border-[#30363D] rounded-t-2xl sm:rounded-2xl shadow-2xl
+                     w-full sm:max-w-md overflow-y-auto overscroll-contain"
+          style={{ maxHeight: 'calc(100dvh - 72px)', WebkitOverflowScrolling: 'touch' }}
+          onClick={e => e.stopPropagation()}
+        >
           <div className="p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-[#E6EDF3]">{title}</h3>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg
-                         text-[#8B949E] hover:text-[#C9D1D9] hover:bg-[#21262D] transition"
-            >
-              ✕
-            </button>
-          </div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#E6EDF3]">{title}</h3>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-lg
+                           text-[#8B949E] hover:text-[#C9D1D9] hover:bg-[#21262D] transition"
+              >
+                ✕
+              </button>
+            </div>
 
-          {!isEditMode && (
-            <ScanArea onResult={handleScanResult} disabled={isSaving} />
-          )}
+            {!isEditMode && (
+              <ScanArea onResult={handleScanResult} disabled={isSaving} />
+            )}
 
-          <CatchForm
-            form={form}
-            onChange={onChange}
-            pokedex={pokedex}
-            isEditMode={isEditMode}
-          />
+            <CatchForm
+              form={form}
+              onChange={onChange}
+              pokedex={pokedex}
+              isEditMode={isEditMode}
+            />
 
-          <div className="flex gap-3 pt-1">
-            <button
-              onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-[#30363D] text-[#8B949E]
-                         hover:text-[#C9D1D9] hover:bg-[#21262D] transition text-sm font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onSave}
-              disabled={isSaving || !form.pokemonName}
-              className="flex-1 py-2.5 rounded-lg bg-[#238636] hover:bg-[#2EA043] text-white
-                         transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Add to Collection')}
-            </button>
+            <div className="flex gap-3 pt-1 pb-2">
+              <button
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-lg border border-[#30363D] text-[#8B949E]
+                           hover:text-[#C9D1D9] hover:bg-[#21262D] transition text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onSave}
+                disabled={isSaving || !form.pokemonName}
+                className="flex-1 py-2.5 rounded-lg bg-[#238636] hover:bg-[#2EA043] text-white
+                           transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Add to Collection')}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-      </div>
-    </div>
+    </>
   )
 }
 
