@@ -4,6 +4,7 @@ import {
   addToCatchCollection,
   updateCatch,
   deleteCatch,
+  deleteAllCatches,
 } from '../services/api.js';
 
 const COLLECTION_QUERY_KEY = ['collection'];
@@ -102,6 +103,21 @@ export function useDeleteCatch() {
 
   return useMutation({
     mutationFn: (catchId) => deleteCatch(catchId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Delete All Catches
+// ---------------------------------------------------------------------------
+
+export function useDeleteAllCollection() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: deleteAllCatches,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: COLLECTION_QUERY_KEY });
     },

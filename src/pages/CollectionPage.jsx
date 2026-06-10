@@ -5,6 +5,7 @@ import {
   useAddToCollection,
   useUpdateCatch,
   useDeleteCatch,
+  useDeleteAllCollection,
 } from '../hooks/useCollection'
 import { usePokedex } from '../hooks/usePokemon'
 import PokemonTable from '../components/Collection/PokemonTable'
@@ -579,11 +580,13 @@ export default function CollectionPage() {
   const addMutation = useAddToCollection()
   const updateMutation = useUpdateCatch()
   const deleteMutation = useDeleteCatch()
+  const deleteAllMutation = useDeleteAllCollection()
   const [trainerLevel] = useTrainerLevel()
   const navigate = useNavigate()
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCsvImporter, setShowCsvImporter] = useState(false)
+  const [showDeleteAll, setShowDeleteAll] = useState(false)
   const [editTarget, setEditTarget] = useState(null)    // caught pokemon object
   const [deleteTarget, setDeleteTarget] = useState(null) // caught pokemon object
   const [addForm, setAddForm] = useState(BLANK_FORM)
@@ -745,6 +748,13 @@ export default function CollectionPage() {
     }
   }, [addMutation])
 
+  const handleDeleteAll = useCallback(async () => {
+    try {
+      await deleteAllMutation.mutateAsync()
+      setShowDeleteAll(false)
+    } catch { /* error handled by hook */ }
+  }, [deleteAllMutation])
+
   // ---- render ---------------------------------------------------------------
   return (
     <div className="space-y-6">
@@ -755,6 +765,15 @@ export default function CollectionPage() {
           <p className="text-sm text-[#8B949E] mt-0.5">Track your caught Pokemon and IVs.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {collection.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAll(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262D] hover:bg-[#DA3633]/20
+                         border border-[#DA3633]/40 text-[#F85149] rounded-xl text-sm font-medium transition"
+            >
+              🗑 Delete All
+            </button>
+          )}
           <button
             onClick={() => setShowCsvImporter(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262D] hover:bg-[#30363D]
@@ -910,6 +929,38 @@ export default function CollectionPage() {
           onCancel={() => setDeleteTarget(null)}
           isDeleting={deleteMutation.isPending}
         />
+      )}
+
+      {/* Delete All confirm */}
+      {showDeleteAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowDeleteAll(false)} />
+          <div className="relative bg-[#161B22] border border-[#F85149]/50 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-base font-bold text-[#E6EDF3]">Delete Entire Collection?</h3>
+            <p className="text-sm text-[#8B949E]">
+              This will permanently remove all{' '}
+              <span className="text-[#F85149] font-semibold">{collection.length} Pokémon</span>{' '}
+              from your collection. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteAll(false)}
+                className="flex-1 py-2.5 rounded-lg border border-[#30363D] text-[#8B949E]
+                           hover:text-[#C9D1D9] hover:bg-[#21262D] transition text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAll}
+                disabled={deleteAllMutation.isPending}
+                className="flex-1 py-2.5 rounded-lg bg-[#DA3633] hover:bg-[#F85149] text-white
+                           transition text-sm font-medium disabled:opacity-60"
+              >
+                {deleteAllMutation.isPending ? 'Deleting...' : 'Delete All'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
