@@ -412,7 +412,7 @@ export default function CollectionPage() {
     try {
       await updateMutation.mutateAsync({
         id: editTarget._id,
-        data: {
+        updates: {
           nickname: editForm.nickname || editForm.pokemonName,
           cp: Number(editForm.cp) || 0,
           ivAttack: Number(editForm.ivAttack),

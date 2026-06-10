@@ -1,7 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, ArrowLeftRight, Trophy } from 'lucide-react';
+import { Home, BookOpen, ArrowLeftRight, Trophy } from 'lucide-react';
 
 const TABS = [
+  { label: 'Home',       to: '/',           icon: Home,           exact: true },
   { label: 'Collection', to: '/collection', icon: BookOpen },
   { label: 'Compare',    to: '/compare',    icon: ArrowLeftRight },
   { label: 'Tiers',      to: '/tiers',      icon: Trophy },
@@ -9,7 +10,9 @@ const TABS = [
 
 export default function BottomNav() {
   const location = useLocation();
-  const isActive = (to) => location.pathname.startsWith(to);
+
+  const isActive = (to, exact) =>
+    exact ? location.pathname === to : location.pathname.startsWith(to);
 
   return (
     <nav
@@ -17,8 +20,8 @@ export default function BottomNav() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="flex items-stretch justify-around max-w-7xl mx-auto">
-        {TABS.map(({ label, to, icon: Icon }) => {
-          const active = isActive(to);
+        {TABS.map(({ label, to, icon: Icon, exact }) => {
+          const active = isActive(to, exact);
           return (
             <Link
               key={to}
@@ -27,17 +30,14 @@ export default function BottomNav() {
                          min-h-[56px] transition-colors active:scale-95
                          ${active ? 'text-[#58A6FF]' : 'text-[#484F58] hover:text-[#8B949E]'}`}
             >
-              <Icon
-                className="w-6 h-6"
-                strokeWidth={active ? 2.5 : 1.5}
-              />
+              {active && (
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#58A6FF] rounded-full" />
+              )}
+              <Icon className="w-6 h-6" strokeWidth={active ? 2.5 : 1.5} />
               <span className={`text-[10px] font-semibold tracking-wide leading-none
                                ${active ? 'text-[#58A6FF]' : 'text-[#484F58]'}`}>
                 {label}
               </span>
-              {active && (
-                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#58A6FF] rounded-full" />
-              )}
             </Link>
           );
         })}

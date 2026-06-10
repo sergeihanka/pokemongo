@@ -206,7 +206,8 @@ const COLLECTION_ENDPOINT = '/.netlify/functions/collection';
  */
 export async function getCatchCollection() {
   const { data } = await axios.get(COLLECTION_ENDPOINT);
-  return data;
+  // API wraps results in { data: [...], total, limit, skip }
+  return Array.isArray(data) ? data : (data?.data ?? []);
 }
 
 /**
