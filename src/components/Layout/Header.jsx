@@ -1,27 +1,12 @@
-import { Link, useLocation } from 'react-router-dom';
-
-const NAV_LINKS = [
-  { label: 'Home', to: '/' },
-  { label: 'My Collection', to: '/collection' },
-  { label: 'Compare', to: '/compare' },
-  { label: 'Tiers', to: '/tiers' },
-];
+import { Link } from 'react-router-dom';
 
 export default function Header() {
-  const location = useLocation();
-
-  const isActive = (to) => {
-    if (to === '/') return location.pathname === '/';
-    return location.pathname.startsWith(to);
-  };
-
   return (
-    <header className="w-full bg-[#161B22] border-b border-[#30363D] sticky top-0 z-50">
+    <header className="w-full bg-[#161B22] border-b border-[#30363D] sticky top-0 z-50"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14">
-          {/* Logo + Title */}
+        <div className="flex items-center h-14">
           <Link to="/" className="flex items-center gap-2 group">
-            {/* Pokeball SVG placeholder */}
             <div className="relative w-8 h-8 flex-shrink-0">
               <svg viewBox="0 0 32 32" className="w-8 h-8" aria-hidden="true">
                 <circle cx="16" cy="16" r="15" fill="#EF4444" stroke="#30363D" strokeWidth="1.5" />
@@ -35,24 +20,6 @@ export default function Header() {
               PokeGosh
             </span>
           </Link>
-
-          {/* Navigation */}
-          <nav className="flex items-center gap-1">
-            {NAV_LINKS.map(({ label, to }) => (
-              <Link
-                key={to}
-                to={to}
-                className={[
-                  'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                  isActive(to)
-                    ? 'bg-blue-600 text-white'
-                    : 'text-[#8B949E] hover:text-[#C9D1D9] hover:bg-[#21262D]',
-                ].join(' ')}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
         </div>
       </div>
     </header>
