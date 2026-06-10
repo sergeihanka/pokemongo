@@ -25,6 +25,43 @@ function calcMaxCPAtLevel(baseAtk, baseDef, baseSta, level = 40) {
   return Math.max(10, Math.floor((baseAtk + 15) * Math.sqrt(baseDef + 15) * Math.sqrt(baseSta + 15) * cpm * cpm / 10))
 }
 
+// ---- Stat math helpers ------------------------------------------------------
+
+function computeQuartiles(sortedValues) {
+  const n = sortedValues.length
+  if (!n) return { min: 0, q1: 0, median: 0, q3: 0, max: 0, avg: 0 }
+  const lerp = (p) => {
+    const idx = (p / 100) * (n - 1)
+    const lo = Math.floor(idx)
+    const hi = Math.ceil(idx)
+    return Math.round(sortedValues[lo] + (sortedValues[hi] - sortedValues[lo]) * (idx - lo))
+  }
+  const sum = sortedValues.reduce((s, v) => s + v, 0)
+  return {
+    min: sortedValues[0],
+    q1: lerp(25),
+    median: lerp(50),
+    q3: lerp(75),
+    max: sortedValues[n - 1],
+    avg: Math.round(sum / n),
+  }
+}
+
+function percentileRank(sortedValues, value) {
+  const n = sortedValues.length
+  if (!n) return 0
+  let lo = 0, hi = n
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (sortedValues[mid] < value) lo = mid + 1
+    else hi = mid
+  }
+  let eqCount = 0
+  let j = lo
+  while (j < n && sortedValues[j] === value) { eqCount++; j++ }
+  return Math.min(99, Math.max(1, Math.round(((lo + eqCount / 2) / n) * 100)))
+}
+
 // ---- Constants --------------------------------------------------------------
 
 const CATEGORIES = [
@@ -39,6 +76,13 @@ const CATEGORIES = [
 const TIER_ORDER = { S: 5, A: 4, B: 3, C: 2, D: 1 }
 
 const MAX_ROWS = 200
+
+const STAT_DEFS = [
+  { key: 'atk', label: 'Attack',  barColor: 'bg-red-500',   textColor: 'text-red-400'   },
+  { key: 'def', label: 'Defense', barColor: 'bg-blue-500',  textColor: 'text-blue-400'  },
+  { key: 'sta', label: 'Stamina', barColor: 'bg-green-500', textColor: 'text-green-400' },
+  { key: 'cp',  label: 'Max CP',  barColor: 'bg-[#1F6FEB]', textColor: 'text-[#58A6FF]' },
+]
 
 // ---- Sub-components ---------------------------------------------------------
 
@@ -58,6 +102,69 @@ function TierBadge({ tier }) {
   )
 }
 
+function PercentileBadge({ pct }) {
+  const color = pct >= 75 ? 'text-green-400' : pct >= 50 ? 'text-[#58A6FF]' : pct >= 25 ? 'text-yellow-500' : 'text-red-400'
+  return <span className={`block text-[10px] leading-tight mt-0.5 ${color}`}>{pct}th</span>
+}
+
+function QuartileBreakdown({ statsInfo, count }) {
+  if (!statsInfo) return null
+
+  return (
+    <div className="bg-[#161B22] border border-[#30363D] rounded-xl p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-[#C9D1D9]">Stat Distribution</h3>
+        <span className="text-xs text-[#8B949E]">{count} Pokémon</span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+        {STAT_DEFS.map(({ key, label, barColor, textColor }) => {
+          const q = statsInfo[key]
+          const range = q.max - q.min || 1
+
+          return (
+            <div key={key}>
+              <p className={`text-xs font-semibold ${textColor} mb-2`}>{label}</p>
+
+              <div className="space-y-1 text-xs mb-3">
+                {[
+                  { label: '75th (Q3)', value: q.q3 },
+                  { label: 'Median',    value: q.median },
+                  { label: 'Average',   value: q.avg },
+                  { label: '25th (Q1)', value: q.q1 },
+                ].map(row => (
+                  <div key={row.label} className="flex justify-between items-center">
+                    <span className="text-[#8B949E]">{row.label}</span>
+                    <span className="text-[#C9D1D9] font-mono font-semibold">{row.value.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Box plot: IQR bar + median line */}
+              <div className="relative h-3 bg-[#21262D] rounded-full overflow-hidden">
+                <div
+                  className={`absolute h-full opacity-60 ${barColor}`}
+                  style={{
+                    left: `${((q.q1 - q.min) / range) * 100}%`,
+                    width: `${Math.max(2, ((q.q3 - q.q1) / range) * 100)}%`,
+                  }}
+                />
+                <div
+                  className="absolute w-0.5 h-full bg-white/70"
+                  style={{ left: `${((q.median - q.min) / range) * 100}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-[#484F58] mt-1">
+                <span>{q.min.toLocaleString()}</span>
+                <span>{q.max.toLocaleString()}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function SkeletonRow() {
   return (
     <tr className="border-b border-[#30363D] animate-pulse">
@@ -70,10 +177,10 @@ function SkeletonRow() {
       </td>
       <td className="py-3 px-4"><div className="h-5 w-16 bg-[#21262D] rounded-full" /></td>
       <td className="py-3 px-4"><div className="h-5 w-8 bg-[#21262D] rounded mx-auto" /></td>
-      <td className="py-3 px-4"><div className="h-3 w-8 bg-[#21262D] rounded mx-auto" /></td>
-      <td className="py-3 px-4"><div className="h-3 w-8 bg-[#21262D] rounded mx-auto" /></td>
-      <td className="py-3 px-4"><div className="h-3 w-8 bg-[#21262D] rounded mx-auto" /></td>
-      <td className="py-3 px-4"><div className="h-3 w-12 bg-[#21262D] rounded mx-auto" /></td>
+      <td className="py-3 px-4"><div className="h-6 w-8 bg-[#21262D] rounded mx-auto" /></td>
+      <td className="py-3 px-4"><div className="h-6 w-8 bg-[#21262D] rounded mx-auto" /></td>
+      <td className="py-3 px-4"><div className="h-6 w-8 bg-[#21262D] rounded mx-auto" /></td>
+      <td className="py-3 px-4"><div className="h-6 w-12 bg-[#21262D] rounded mx-auto" /></td>
     </tr>
   )
 }
@@ -91,11 +198,11 @@ export default function TierRankingsPage() {
 
   const maxPowerUpLevel = Math.min(trainerLevel + 10, 50)
 
-  const results = useMemo(() => {
+  const { results, statsInfo } = useMemo(() => {
     const catFn = CATEGORIES.find(c => c.id === activeCategory)?.fn
-    if (!catFn || !pokedex.length) return []
+    if (!catFn || !pokedex.length) return { results: [], statsInfo: null }
 
-    return pokedex
+    const mapped = pokedex
       .map(p => {
         const name = p.names?.English ?? ''
         const tier = catFn(name)
@@ -109,11 +216,34 @@ export default function TierRankingsPage() {
         if (nameSearch && !p.names?.English?.toLowerCase().includes(nameSearch.toLowerCase())) return false
         return true
       })
+
+    const sortedAtk = mapped.map(p => p.baseAtk).sort((a, b) => a - b)
+    const sortedDef = mapped.map(p => p.baseDef).sort((a, b) => a - b)
+    const sortedSta = mapped.map(p => p.baseSta).sort((a, b) => a - b)
+    const sortedCP  = mapped.map(p => p.maxCP).sort((a, b) => a - b)
+
+    const statsInfo = {
+      atk: computeQuartiles(sortedAtk),
+      def: computeQuartiles(sortedDef),
+      sta: computeQuartiles(sortedSta),
+      cp:  computeQuartiles(sortedCP),
+    }
+
+    const withPercentiles = mapped
+      .map(p => ({
+        ...p,
+        atkPct: percentileRank(sortedAtk, p.baseAtk),
+        defPct: percentileRank(sortedDef, p.baseDef),
+        staPct: percentileRank(sortedSta, p.baseSta),
+        cpPct:  percentileRank(sortedCP, p.maxCP),
+      }))
       .sort((a, b) => {
         const ta = TIER_ORDER[a.tier] ?? 0, tb = TIER_ORDER[b.tier] ?? 0
         if (ta !== tb) return tb - ta
         return b.maxCP - a.maxCP
       })
+
+    return { results: withPercentiles, statsInfo }
   }, [pokedex, activeCategory, level, nameSearch, tierFilter])
 
   const displayedRows = results.slice(0, MAX_ROWS)
@@ -219,6 +349,9 @@ export default function TierRankingsPage() {
         </div>
       </div>
 
+      {/* Quartile breakdown */}
+      {!isLoading && <QuartileBreakdown statsInfo={statsInfo} count={results.length} />}
+
       {/* Results count */}
       {!isLoading && (
         <p className="text-sm text-[#8B949E]">
@@ -238,9 +371,9 @@ export default function TierRankingsPage() {
                 <th className="py-2.5 px-4 text-left text-xs font-medium text-[#8B949E] uppercase tracking-wider">Pokemon</th>
                 <th className="py-2.5 px-4 text-left text-xs font-medium text-[#8B949E] uppercase tracking-wider">Type</th>
                 <th className="py-2.5 px-4 text-center text-xs font-medium text-[#8B949E] uppercase tracking-wider">Tier</th>
-                <th className="py-2.5 px-4 text-center text-xs font-medium text-[#8B949E] uppercase tracking-wider">Base ATK</th>
-                <th className="py-2.5 px-4 text-center text-xs font-medium text-[#8B949E] uppercase tracking-wider">Base DEF</th>
-                <th className="py-2.5 px-4 text-center text-xs font-medium text-[#8B949E] uppercase tracking-wider">Base STA</th>
+                <th className="py-2.5 px-4 text-center text-xs font-medium text-[#8B949E] uppercase tracking-wider">ATK</th>
+                <th className="py-2.5 px-4 text-center text-xs font-medium text-[#8B949E] uppercase tracking-wider">DEF</th>
+                <th className="py-2.5 px-4 text-center text-xs font-medium text-[#8B949E] uppercase tracking-wider">STA</th>
                 <th className="py-2.5 px-4 text-center text-xs font-medium text-[#8B949E] uppercase tracking-wider">
                   Max CP (Lv {level})
                 </th>
@@ -308,14 +441,28 @@ export default function TierRankingsPage() {
                         <TierBadge tier={p.tier} />
                       </td>
 
-                      {/* Base stats */}
-                      <td className="py-2.5 px-4 text-xs text-[#C9D1D9] text-center font-semibold">{p.baseAtk}</td>
-                      <td className="py-2.5 px-4 text-xs text-[#C9D1D9] text-center font-semibold">{p.baseDef}</td>
-                      <td className="py-2.5 px-4 text-xs text-[#C9D1D9] text-center font-semibold">{p.baseSta}</td>
+                      {/* ATK */}
+                      <td className="py-2.5 px-4 text-center">
+                        <span className="text-xs text-[#C9D1D9] font-semibold">{p.baseAtk}</span>
+                        <PercentileBadge pct={p.atkPct} />
+                      </td>
+
+                      {/* DEF */}
+                      <td className="py-2.5 px-4 text-center">
+                        <span className="text-xs text-[#C9D1D9] font-semibold">{p.baseDef}</span>
+                        <PercentileBadge pct={p.defPct} />
+                      </td>
+
+                      {/* STA */}
+                      <td className="py-2.5 px-4 text-center">
+                        <span className="text-xs text-[#C9D1D9] font-semibold">{p.baseSta}</span>
+                        <PercentileBadge pct={p.staPct} />
+                      </td>
 
                       {/* Max CP */}
-                      <td className="py-2.5 px-4 text-xs text-[#58A6FF] text-center font-semibold">
-                        {p.maxCP.toLocaleString()}
+                      <td className="py-2.5 px-4 text-center">
+                        <span className="text-xs text-[#58A6FF] font-semibold">{p.maxCP.toLocaleString()}</span>
+                        <PercentileBadge pct={p.cpPct} />
                       </td>
                     </tr>
                   )
