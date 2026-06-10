@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import {
   useCollection,
   useAddToCollection,
@@ -7,6 +7,113 @@ import {
 } from '../hooks/useCollection'
 import { usePokedex } from '../hooks/usePokemon'
 import PokemonTable from '../components/Collection/PokemonTable'
+
+// ---- screenshot scanner helpers -----------------------------------------------
+
+function resizeToBase64(file, maxPx = 1024, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+      const b64 = canvas.toDataURL('image/jpeg', quality).split(',')[1]
+      resolve(b64)
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+async function scanScreenshot(file) {
+  const image = await resizeToBase64(file)
+  const res = await fetch('/api/scan-pokemon', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image, mediaType: 'image/jpeg' }),
+  })
+  if (!res.ok) throw new Error(`Scan failed: ${res.status}`)
+  return res.json()
+}
+
+function ScanArea({ onResult, disabled }) {
+  const [scanning, setScanning] = useState(false)
+  const [error, setError] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const inputRef = useRef(null)
+
+  async function handleFile(file) {
+    if (!file || !file.type.startsWith('image/')) return
+    setError(null)
+    setPreview(URL.createObjectURL(file))
+    setScanning(true)
+    try {
+      const result = await scanScreenshot(file)
+      onResult(result)
+    } catch (err) {
+      setError(err.message || 'Scan failed')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleFile(file)
+  }
+
+  return (
+    <div className="space-y-2">
+      <div
+        onDrop={handleDrop}
+        onDragOver={e => e.preventDefault()}
+        onClick={() => !disabled && !scanning && inputRef.current?.click()}
+        className={`relative border-2 border-dashed rounded-xl p-4 text-center transition cursor-pointer
+          ${scanning ? 'border-[#58A6FF]/60 bg-[#58A6FF]/5 cursor-wait' : 'border-[#30363D] hover:border-[#58A6FF]/60 hover:bg-[#21262D]'}
+          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => handleFile(e.target.files?.[0])}
+        />
+        {preview ? (
+          <div className="flex items-center gap-3">
+            <img src={preview} alt="screenshot" className="w-16 h-16 object-contain rounded-lg border border-[#30363D]" />
+            <div className="flex-1 text-left">
+              {scanning ? (
+                <div className="flex items-center gap-2 text-sm text-[#58A6FF]">
+                  <div className="w-4 h-4 border-2 border-[#58A6FF] border-t-transparent rounded-full animate-spin" />
+                  Scanning screenshot...
+                </div>
+              ) : (
+                <p className="text-xs text-[#3FB950]">Scan complete — tap to re-scan</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="text-2xl mb-1">📸</div>
+            <p className="text-sm text-[#C9D1D9] font-medium">
+              {scanning ? 'Scanning…' : 'Upload screenshot to auto-fill'}
+            </p>
+            <p className="text-xs text-[#484F58] mt-0.5">Tap or drag a Pokémon GO screenshot</p>
+          </>
+        )}
+      </div>
+      {error && <p className="text-xs text-[#F85149] px-1">{error}</p>}
+    </div>
+  )
+}
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -280,6 +387,27 @@ function CatchForm({ form, onChange, pokedex, isEditMode }) {
 }
 
 function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex, isEditMode }) {
+  function handleScanResult(result) {
+    if (!result) return
+    if (result.pokemonName) {
+      const match = (pokedex || []).find(
+        p => p.names?.English?.toLowerCase() === result.pokemonName.toLowerCase()
+      )
+      if (match) {
+        onChange('pokemonId', match.dexNr)
+        onChange('pokemonName', match.names.English)
+      }
+    }
+    if (result.cp != null)         onChange('cp', String(result.cp))
+    if (result.level != null)      onChange('level', String(result.level))
+    if (result.ivAttack != null)   onChange('ivAttack', String(Math.min(15, Math.max(0, result.ivAttack))))
+    if (result.ivDefense != null)  onChange('ivDefense', String(Math.min(15, Math.max(0, result.ivDefense))))
+    if (result.ivStamina != null)  onChange('ivStamina', String(Math.min(15, Math.max(0, result.ivStamina))))
+    if (result.isShiny)            onChange('isShiny', true)
+    if (result.isShadow)           onChange('isShadow', true)
+    if (result.notes)              onChange('notes', result.notes)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
@@ -296,6 +424,10 @@ function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex,
               ✕
             </button>
           </div>
+
+          {!isEditMode && (
+            <ScanArea onResult={handleScanResult} disabled={isSaving} />
+          )}
 
           <CatchForm
             form={form}

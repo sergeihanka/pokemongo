@@ -984,6 +984,72 @@ export default function PokemonDetailPage() {
         <EvolutionChain pokemon={pokemon} />
       </SectionCard>
 
+      {/* Your Catches */}
+      {(() => {
+        const catches = collection.filter(c => c.pokemonId === pokemon.dexNr)
+        if (!catches.length) return null
+        const sorted = [...catches].sort((a, b) => {
+          const pA = calculateIVPercentage(a.ivAttack, a.ivDefense, a.ivStamina)
+          const pB = calculateIVPercentage(b.ivAttack, b.ivDefense, b.ivStamina)
+          return pB - pA
+        })
+        const best = sorted[0]
+        const bestPct = calculateIVPercentage(best.ivAttack, best.ivDefense, best.ivStamina)
+        const currentPct = calculateIVPercentage(ivs.attack, ivs.defense, ivs.stamina)
+        let rec = null
+        if (currentPct > bestPct + 1) {
+          rec = { label: 'UPGRADE', msg: `This ${currentPct.toFixed(1)}% beats your best (${bestPct.toFixed(1)}%). Replace it!`, cls: 'border-blue-500/40 bg-blue-500/10 text-blue-300' }
+        } else if (currentPct >= 90 && bestPct >= 90) {
+          rec = { label: 'KEEP BOTH', msg: `Both are 90%+ — worth keeping for different content.`, cls: 'border-green-500/40 bg-green-500/10 text-green-300' }
+        } else if (currentPct < bestPct - 1) {
+          rec = { label: 'KEEP EXISTING', msg: `Your best (${bestPct.toFixed(1)}%) is better than this one (${currentPct.toFixed(1)}%). Transfer for candy?`, cls: 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300' }
+        }
+
+        return (
+          <SectionCard title={`Your ${pokemon.names?.English} Catches (${catches.length})`}>
+            {rec && (
+              <div className={`rounded-xl border px-4 py-3 mb-4 ${rec.cls}`}>
+                <p className="text-xs font-bold mb-0.5">{rec.label}</p>
+                <p className="text-xs opacity-90">{rec.msg}</p>
+              </div>
+            )}
+            <div className="space-y-2">
+              {sorted.map((c, i) => {
+                const pct = calculateIVPercentage(c.ivAttack, c.ivDefense, c.ivStamina)
+                return (
+                  <div key={c._id ?? i}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm
+                      ${i === 0 ? 'bg-yellow-900/10 border-yellow-600/30' : 'bg-[#21262D] border-[#30363D]'}`}
+                  >
+                    <img
+                      src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${c.pokemonId}.png`}
+                      alt="" className="w-8 h-8 object-contain flex-shrink-0"
+                      onError={e => { e.target.style.display = 'none' }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[#E6EDF3] font-medium truncate">
+                        {c.nickname && c.nickname !== c.pokemonName ? c.nickname : '—'}
+                        {c.isShiny && ' ✨'}
+                        {c.isShadow && ' 👻'}
+                        {i === 0 && <span className="ml-1 text-[10px] text-yellow-400 font-semibold">BEST</span>}
+                      </p>
+                      <p className="text-[#8B949E] text-xs">
+                        {c.ivAttack}/{c.ivDefense}/{c.ivStamina} · Lv {c.level} · CP {c.cp}
+                      </p>
+                    </div>
+                    <span className={`text-sm font-bold flex-shrink-0 ${
+                      pct === 100 ? 'text-yellow-400' : pct >= 82 ? 'text-green-400' : 'text-[#8B949E]'
+                    }`}>
+                      {pct.toFixed(1)}%
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </SectionCard>
+        )
+      })()}
+
       {/* Stat distribution modal */}
       {statModal && (
         <StatDistributionModal
