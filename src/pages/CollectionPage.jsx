@@ -415,11 +415,12 @@ function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex,
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[#161B22] border border-[#30363D] rounded-2xl shadow-2xl
-                      w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="p-6 space-y-5">
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-end justify-center p-4 sm:items-center">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-[#161B22] border border-[#30363D] rounded-2xl shadow-2xl
+                        w-full max-w-md">
+          <div className="p-6 space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-[#E6EDF3]">{title}</h3>
             <button
@@ -460,6 +461,7 @@ function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex,
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   )
