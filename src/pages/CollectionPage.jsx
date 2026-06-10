@@ -753,6 +753,7 @@ export default function CollectionPage() {
       {!isLoading && !isError && collection.length > 0 && (
         <PokemonTable
           collection={collection}
+          pokedex={pokedex}
           onEdit={openEdit}
           onDelete={c => setDeleteTarget(c)}
         />

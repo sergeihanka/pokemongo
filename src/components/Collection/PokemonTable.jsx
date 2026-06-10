@@ -44,29 +44,16 @@ function ivColor(pct) {
   return 'text-[#8B949E]';
 }
 
-const SORT_FIELDS = ['name', 'cp', 'ivPct', 'date'];
-
 function SortIcon({ active, dir }) {
   if (!active) return <span className="text-[#30363D] ml-1">↕</span>;
   return <span className="text-blue-400 ml-1">{dir === 'asc' ? '↑' : '↓'}</span>;
 }
 
-/**
- * PokemonTable — sortable, filterable table of caught Pokemon.
- *
- * Each row object expected shape:
- * { pokemonName, dexNr?, cp, ivAttack, ivDefense, ivStamina,
- *   isShiny, isShadow, nickname, caughtDate, _id }
- *
- * @param {Array}    pokemon   - Array of caught pokemon objects
- * @param {Function} onEdit    - (pokemon) => void
- * @param {Function} onDelete  - (id) => void
- * @param {Function} onSelect  - (pokemon) => void  (for compare)
- */
-export default function PokemonTable({ collection = [], onEdit, onDelete, onSelect }) {
+export default function PokemonTable({ collection = [], pokedex = [], onEdit, onDelete, onSelect }) {
   const [filter, setFilter] = useState('');
   const [sortField, setSortField] = useState('cp');
   const [sortDir, setSortDir] = useState('desc');
+  const [dupesOnly, setDupesOnly] = useState(false);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -77,28 +64,61 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
     }
   };
 
+  // Base stat lookup keyed by pokemonId (dexNr)
+  const baseOf = useMemo(() => {
+    const map = {};
+    for (const p of pokedex) {
+      if (p.dexNr) map[p.dexNr] = {
+        atk: p.baseAttack ?? 0,
+        def: p.baseDefense ?? 0,
+        sta: p.baseStamina ?? 0,
+      };
+    }
+    return map;
+  }, [pokedex]);
+
   const rows = useMemo(() => {
-    let data = collection.map((p) => ({
-      ...p,
-      ivPct: calculateIVPercentage(p.ivAttack, p.ivDefense, p.ivStamina),
-      stars: getIVStars(p.ivAttack, p.ivDefense, p.ivStamina),
-    }));
+    // Count occurrences of each species for duplicate detection
+    const speciesCount = {};
+    for (const p of collection) {
+      speciesCount[p.pokemonId] = (speciesCount[p.pokemonId] || 0) + 1;
+    }
+
+    let data = collection.map((p) => {
+      const base = baseOf[p.pokemonId] ?? { atk: 0, def: 0, sta: 0 };
+      return {
+        ...p,
+        ivPct: calculateIVPercentage(p.ivAttack, p.ivDefense, p.ivStamina),
+        stars: getIVStars(p.ivAttack, p.ivDefense, p.ivStamina),
+        baseAtk: base.atk,
+        baseDef: base.def,
+        baseSta: base.sta,
+        dupeCount: speciesCount[p.pokemonId] || 1,
+      };
+    });
 
     if (filter.trim()) {
-      const q = filter.toLowerCase()
+      const q = filter.toLowerCase();
       data = data.filter(
         (p) =>
           (p.pokemonName ?? '').toLowerCase().includes(q) ||
           (p.nickname ?? '').toLowerCase().includes(q),
-      )
+      );
+    }
+
+    if (dupesOnly) {
+      data = data.filter((p) => p.dupeCount > 1);
     }
 
     data.sort((a, b) => {
       let av, bv;
       switch (sortField) {
-        case 'cp':     av = a.cp ?? 0;     bv = b.cp ?? 0; break;
-        case 'ivPct':  av = a.ivPct ?? 0;  bv = b.ivPct ?? 0; break;
-        case 'date':   av = new Date(a.caughtDate ?? 0); bv = new Date(b.caughtDate ?? 0); break;
+        case 'cp':      av = a.cp ?? 0;      bv = b.cp ?? 0;      break;
+        case 'ivPct':   av = a.ivPct ?? 0;   bv = b.ivPct ?? 0;   break;
+        case 'date':    av = new Date(a.caughtDate ?? 0); bv = new Date(b.caughtDate ?? 0); break;
+        case 'baseAtk': av = a.baseAtk;      bv = b.baseAtk;      break;
+        case 'baseDef': av = a.baseDef;      bv = b.baseDef;      break;
+        case 'baseSta': av = a.baseSta;      bv = b.baseSta;      break;
         case 'name':
         default:
           av = (a.nickname ?? a.pokemonName ?? '').toLowerCase();
@@ -111,22 +131,42 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
     });
 
     return data;
-  }, [collection, filter, sortField, sortDir]);
+  }, [collection, filter, sortField, sortDir, dupesOnly, baseOf]);
+
+  const dupeTotal = useMemo(
+    () => collection.filter((p, i, arr) => arr.findIndex(x => x.pokemonId === p.pokemonId) !== i).length,
+    [collection],
+  );
 
   const thClass = 'text-left text-xs font-semibold text-[#8B949E] uppercase tracking-wide px-3 py-2 whitespace-nowrap select-none';
   const thClickable = `${thClass} cursor-pointer hover:text-[#C9D1D9] transition-colors`;
 
   return (
     <div className="space-y-3">
-      {/* Filter */}
-      <div className="flex items-center gap-3">
+      {/* Filter row */}
+      <div className="flex items-center gap-2 flex-wrap">
         <input
           type="text"
           placeholder="Filter by name or nickname…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="flex-1 bg-[#161B22] border border-[#30363D] rounded-lg px-3 py-2 text-sm text-[#C9D1D9] placeholder-[#8B949E] focus:outline-none focus:border-blue-500 transition-colors"
+          className="flex-1 min-w-0 bg-[#161B22] border border-[#30363D] rounded-lg px-3 py-2 text-sm text-[#C9D1D9] placeholder-[#8B949E] focus:outline-none focus:border-blue-500 transition-colors"
         />
+        <button
+          onClick={() => setDupesOnly((v) => !v)}
+          title="Show duplicates only"
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap
+            ${dupesOnly
+              ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
+              : 'bg-[#161B22] border-[#30363D] text-[#8B949E] hover:text-[#C9D1D9] hover:border-[#8B949E]'}`}
+        >
+          Dupes
+          {dupeTotal > 0 && (
+            <span className={`px-1 rounded text-[10px] font-bold ${dupesOnly ? 'bg-orange-500/30 text-orange-300' : 'bg-[#30363D] text-[#8B949E]'}`}>
+              {dupeTotal}
+            </span>
+          )}
+        </button>
         <span className="text-[#8B949E] text-xs whitespace-nowrap">
           {rows.length} / {collection.length}
         </span>
@@ -134,35 +174,41 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
 
       {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-[#30363D]">
-        <table className="w-full min-w-[700px] border-collapse">
+        <table className="w-full min-w-[820px] border-collapse">
           <thead className="bg-[#161B22] sticky top-0 z-10">
             <tr className="border-b border-[#30363D]">
               <th className={thClass}>Sprite</th>
-              <th
-                className={thClickable}
-                onClick={() => handleSort('name')}
-              >
+              <th className={thClickable} onClick={() => handleSort('name')}>
                 Name <SortIcon active={sortField === 'name'} dir={sortDir} />
               </th>
-              <th
-                className={thClickable}
-                onClick={() => handleSort('cp')}
-              >
+              <th className={thClickable} onClick={() => handleSort('cp')}>
                 CP <SortIcon active={sortField === 'cp'} dir={sortDir} />
               </th>
               <th className={thClass}>IVs (A/D/S)</th>
-              <th
-                className={thClickable}
-                onClick={() => handleSort('ivPct')}
-              >
+              {/* Base stats column — three mini sort buttons */}
+              <th className={thClass}>
+                <span className="block text-[11px] leading-none mb-1">Base</span>
+                <div className="flex gap-1">
+                  {[['baseAtk', 'A'], ['baseDef', 'D'], ['baseSta', 'S']].map(([f, label]) => (
+                    <button
+                      key={f}
+                      onClick={() => handleSort(f)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors
+                        ${sortField === f
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                          : 'text-[#484F58] hover:text-[#8B949E]'}`}
+                    >
+                      {label}{sortField === f ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                    </button>
+                  ))}
+                </div>
+              </th>
+              <th className={thClickable} onClick={() => handleSort('ivPct')}>
                 IV% <SortIcon active={sortField === 'ivPct'} dir={sortDir} />
               </th>
               <th className={thClass}>Stars</th>
               <th className={thClass}>Tags</th>
-              <th
-                className={thClickable}
-                onClick={() => handleSort('date')}
-              >
+              <th className={thClickable} onClick={() => handleSort('date')}>
                 Date <SortIcon active={sortField === 'date'} dir={sortDir} />
               </th>
               <th className={thClass}>Actions</th>
@@ -171,8 +217,8 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center text-[#8B949E] py-10 text-sm italic">
-                  {filter ? 'No Pokemon match your filter.' : 'No Pokemon in collection yet.'}
+                <td colSpan={10} className="text-center text-[#8B949E] py-10 text-sm italic">
+                  {dupesOnly ? 'No duplicates in your collection.' : filter ? 'No Pokemon match your filter.' : 'No Pokemon in collection yet.'}
                 </td>
               </tr>
             )}
@@ -181,11 +227,13 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
               const pct = p.ivPct;
               const pctColorClass = ivColor(pct);
               const spriteUrl = getSpriteUrl(p.pokemonName, p.pokemonId);
+              const isDupe = p.dupeCount > 1;
 
               return (
                 <tr
                   key={p._id}
-                  className="border-b border-[#30363D]/50 hover:bg-[#21262D] transition-colors group"
+                  className={`border-b border-[#30363D]/50 hover:bg-[#21262D] transition-colors
+                    ${isDupe ? 'border-l-2 border-l-orange-500/40' : ''}`}
                 >
                   {/* Sprite */}
                   <td className="px-3 py-2 w-12">
@@ -223,6 +271,21 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
                     <span className="text-green-400">{p.ivStamina ?? '?'}</span>
                   </td>
 
+                  {/* Base Stats */}
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {p.baseAtk ? (
+                      <>
+                        <span className={`${sortField === 'baseAtk' ? 'text-red-300 font-bold' : 'text-red-400/70'}`}>{p.baseAtk}</span>
+                        <span className="text-[#30363D]">/</span>
+                        <span className={`${sortField === 'baseDef' ? 'text-blue-300 font-bold' : 'text-blue-400/70'}`}>{p.baseDef}</span>
+                        <span className="text-[#30363D]">/</span>
+                        <span className={`${sortField === 'baseSta' ? 'text-green-300 font-bold' : 'text-green-400/70'}`}>{p.baseSta}</span>
+                      </>
+                    ) : (
+                      <span className="text-[#484F58]">—</span>
+                    )}
+                  </td>
+
                   {/* IV% */}
                   <td className={`px-3 py-2 font-mono text-sm font-bold ${pctColorClass}`}>
                     {pct != null ? `${pct.toFixed(1)}%` : '—'}
@@ -236,6 +299,11 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
                   {/* Tags */}
                   <td className="px-3 py-2">
                     <div className="flex gap-1 flex-wrap">
+                      {isDupe && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/40">
+                          ×{p.dupeCount}
+                        </span>
+                      )}
                       {p.isShiny && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/40">
                           ✨ Shiny
