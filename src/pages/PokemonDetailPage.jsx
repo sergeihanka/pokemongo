@@ -411,11 +411,14 @@ export default function PokemonDetailPage() {
   const baseAtk = displayPokemon.baseAttack ?? displayPokemon.stats?.attack ?? 0
   const baseDef = displayPokemon.baseDefense ?? displayPokemon.stats?.defense ?? 0
   const baseSta = displayPokemon.baseStamina ?? displayPokemon.stats?.stamina ?? 0
-  const maxStatVal = Math.max(baseAtk, baseDef, baseSta, 1)
-
   const atkPct = statSortedArrays ? percentileRank(statSortedArrays.atkArr, baseAtk) : null
   const defPct = statSortedArrays ? percentileRank(statSortedArrays.defArr, baseDef) : null
   const staPct = statSortedArrays ? percentileRank(statSortedArrays.staArr, baseSta) : null
+
+  // Global per-stat maxes so bars reflect cross-Pokémon scale, not within-Pokémon scale
+  const atkMax = statSortedArrays?.atkArr.at(-1) ?? 400
+  const defMax = statSortedArrays?.defArr.at(-1) ?? 400
+  const staMax = statSortedArrays?.staArr.at(-1) ?? 400
 
   // Dynamic CP breakpoints — reactive to IV slider changes
   const cpL20 = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 20)
@@ -575,9 +578,9 @@ export default function PokemonDetailPage() {
         {/* Left: Base Stats + IV Calculator + IV-Adjusted Stats */}
         <SectionCard title="Base Stats">
           <div className="space-y-3">
-            <StatBar label="Attack"  value={baseAtk} max={maxStatVal} color="bg-orange-500" percentile={atkPct} />
-            <StatBar label="Defense" value={baseDef} max={maxStatVal} color="bg-blue-500"   percentile={defPct} />
-            <StatBar label="Stamina" value={baseSta} max={maxStatVal} color="bg-green-500"  percentile={staPct} />
+            <StatBar label="Attack"  value={baseAtk} max={atkMax} color="bg-orange-500" percentile={atkPct} />
+            <StatBar label="Defense" value={baseDef} max={defMax} color="bg-blue-500"   percentile={defPct} />
+            <StatBar label="Stamina" value={baseSta} max={staMax} color="bg-green-500"  percentile={staPct} />
           </div>
 
           {/* IV Calculator */}
