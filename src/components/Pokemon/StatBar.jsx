@@ -28,13 +28,17 @@ function pctColor(pct) {
  * @param {string}  label
  * @param {number}  value
  * @param {number}  [max=400]
- * @param {string}  [color]       - Tailwind bg class. Auto-detected from label if omitted.
- * @param {boolean} [animate]     - Whether to animate the bar on mount (default true).
- * @param {number}  [percentile]  - Optional 0-100 percentile rank shown after the value.
+ * @param {string}  [color]        - Tailwind bg class. Auto-detected from label if omitted.
+ * @param {boolean} [animate]      - Whether to animate the bar on mount (default true).
+ * @param {number}  [percentile]   - Optional 0-100 percentile rank shown after the value.
+ * @param {number}  [barPercent]   - If provided, directly sets bar fill % (overrides value/max).
+ *                                   Use this to keep bar visually consistent with a percentile.
  */
-export default function StatBar({ label, value, max = 400, color, animate = true, percentile }) {
+export default function StatBar({ label, value, max = 400, color, animate = true, percentile, barPercent }) {
   const barColor = useMemo(() => resolveColor(label, color), [label, color]);
-  const pct = Math.min(100, Math.max(0, (value / max) * 100));
+  const pct = barPercent != null
+    ? Math.min(100, Math.max(0, barPercent))
+    : Math.min(100, Math.max(0, (value / max) * 100));
 
   return (
     <div className="flex items-center gap-2 w-full">
