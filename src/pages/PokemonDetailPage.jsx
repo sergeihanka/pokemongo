@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { usePokemonDetail } from '../hooks/usePokemon'
+import { usePokemonDetail, usePokedex } from '../hooks/usePokemon'
 import { useAddToCollection, useCollection } from '../hooks/useCollection'
 import { calculateIVPercentage, calculateCP, effectiveAttack, effectiveDefense, effectiveStamina } from '../utils/ivCalculator'
 import TypeBadge from '../components/Pokemon/TypeBadge'
@@ -238,6 +238,20 @@ function Input({ className = '', ...props }) {
   )
 }
 
+function percentileRank(sortedValues, value) {
+  const n = sortedValues.length
+  if (!n) return null
+  let lo = 0, hi = n
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (sortedValues[mid] < value) lo = mid + 1
+    else hi = mid
+  }
+  let eq = 0, j = lo
+  while (j < n && sortedValues[j] === value) { eq++; j++ }
+  return Math.min(99, Math.max(1, Math.round(((lo + eq / 2) / n) * 100)))
+}
+
 function ivPercent(form) {
   const a = Number(form.ivAttack) || 0
   const d = Number(form.ivDefense) || 0
@@ -260,6 +274,16 @@ export default function PokemonDetailPage() {
   const { data: pokemon, isLoading, isError } = usePokemonDetail(name)
   const addToCollection = useAddToCollection()
   const { data: collection = [] } = useCollection()
+  const { data: pokedex = [] } = usePokedex()
+
+  // Sorted stat arrays for percentile calculation (stable across form changes)
+  const statSortedArrays = useMemo(() => {
+    if (!pokedex.length) return null
+    const atkArr = pokedex.map(p => p.baseAttack ?? 0).sort((a, b) => a - b)
+    const defArr = pokedex.map(p => p.baseDefense ?? 0).sort((a, b) => a - b)
+    const staArr = pokedex.map(p => p.baseStamina ?? 0).sort((a, b) => a - b)
+    return { atkArr, defArr, staArr }
+  }, [pokedex])
 
   const [activeForm, setActiveForm] = useState('normal') // 'normal' | 'shadow' | 'mega'
   const [ivs, setIvs] = useState({ attack: 15, defense: 15, stamina: 15 })
@@ -388,6 +412,10 @@ export default function PokemonDetailPage() {
   const baseDef = displayPokemon.baseDefense ?? displayPokemon.stats?.defense ?? 0
   const baseSta = displayPokemon.baseStamina ?? displayPokemon.stats?.stamina ?? 0
   const maxStatVal = Math.max(baseAtk, baseDef, baseSta, 1)
+
+  const atkPct = statSortedArrays ? percentileRank(statSortedArrays.atkArr, baseAtk) : null
+  const defPct = statSortedArrays ? percentileRank(statSortedArrays.defArr, baseDef) : null
+  const staPct = statSortedArrays ? percentileRank(statSortedArrays.staArr, baseSta) : null
 
   // Dynamic CP breakpoints — reactive to IV slider changes
   const cpL20 = calculateCP(baseAtk, baseDef, baseSta, ivs.attack, ivs.defense, ivs.stamina, 20)
@@ -547,9 +575,9 @@ export default function PokemonDetailPage() {
         {/* Left: Base Stats + IV Calculator + IV-Adjusted Stats */}
         <SectionCard title="Base Stats">
           <div className="space-y-3">
-            <StatBar label="Attack"  value={baseAtk} max={maxStatVal} color="bg-orange-500" />
-            <StatBar label="Defense" value={baseDef} max={maxStatVal} color="bg-blue-500" />
-            <StatBar label="Stamina" value={baseSta} max={maxStatVal} color="bg-green-500" />
+            <StatBar label="Attack"  value={baseAtk} max={maxStatVal} color="bg-orange-500" percentile={atkPct} />
+            <StatBar label="Defense" value={baseDef} max={maxStatVal} color="bg-blue-500"   percentile={defPct} />
+            <StatBar label="Stamina" value={baseSta} max={maxStatVal} color="bg-green-500"  percentile={staPct} />
           </div>
 
           {/* IV Calculator */}
@@ -783,11 +811,9 @@ export default function PokemonDetailPage() {
       </SectionCard>
 
       {/* Evolution Chain */}
-      {pokemon.evolutions?.length > 0 && (
-        <SectionCard title="Evolution Chain">
-          <EvolutionChain pokemon={pokemon} />
-        </SectionCard>
-      )}
+      <SectionCard title="Evolution Chain">
+        <EvolutionChain pokemon={pokemon} />
+      </SectionCard>
 
       {/* Add to collection modal */}
       {showModal && (

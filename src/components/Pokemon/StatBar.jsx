@@ -16,15 +16,23 @@ function resolveColor(label, explicitColor) {
   return LABEL_COLOR_MAP[key] ?? 'bg-[#1F6FEB]';
 }
 
+function pctColor(pct) {
+  if (pct >= 75) return 'text-green-400';
+  if (pct >= 50) return 'text-[#58A6FF]';
+  if (pct >= 25) return 'text-yellow-500';
+  return 'text-red-400';
+}
+
 /**
  * StatBar — horizontal bar showing a stat value relative to a max.
- * @param {string} label
- * @param {number} value
- * @param {number} [max=400]
- * @param {string} [color]     - Tailwind bg class. Auto-detected from label if omitted.
- * @param {boolean} [animate]  - Whether to animate the bar on mount (default true).
+ * @param {string}  label
+ * @param {number}  value
+ * @param {number}  [max=400]
+ * @param {string}  [color]       - Tailwind bg class. Auto-detected from label if omitted.
+ * @param {boolean} [animate]     - Whether to animate the bar on mount (default true).
+ * @param {number}  [percentile]  - Optional 0-100 percentile rank shown after the value.
  */
-export default function StatBar({ label, value, max = 400, color, animate = true }) {
+export default function StatBar({ label, value, max = 400, color, animate = true, percentile }) {
   const barColor = useMemo(() => resolveColor(label, color), [label, color]);
   const pct = Math.min(100, Math.max(0, (value / max) * 100));
 
@@ -49,6 +57,13 @@ export default function StatBar({ label, value, max = 400, color, animate = true
       <span className="text-[#C9D1D9] text-xs font-mono w-10 text-right flex-shrink-0">
         {value}
       </span>
+
+      {/* Percentile badge */}
+      {percentile != null && (
+        <span className={`text-[10px] font-medium flex-shrink-0 w-7 text-right ${pctColor(percentile)}`}>
+          {percentile}th
+        </span>
+      )}
     </div>
   );
 }

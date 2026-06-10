@@ -12,6 +12,18 @@ function jsonResponse(statusCode, body) {
 }
 
 function toSlimShape(doc) {
+  const rawEvos = doc.data?.evolutions;
+  const evosArr = Array.isArray(rawEvos) ? rawEvos
+    : (rawEvos && typeof rawEvos === 'object') ? Object.values(rawEvos)
+    : [];
+  const evolutionLinks = evosArr
+    .map(e => ({
+      formId: e.formId ?? e.id ?? null,
+      candies: e.candies ?? e.candyCost ?? null,
+      condition: e.item?.names?.English ?? e.evolutionItemRequirement ?? null,
+    }))
+    .filter(e => e.formId);
+
   return {
     formId: doc.formId,
     dexNr: doc.dexNr,
@@ -25,6 +37,7 @@ function toSlimShape(doc) {
     secondaryType: doc.secondaryType ? { names: { English: doc.secondaryType } } : null,
     hasMegaEvolution: doc.hasMegaEvolution,
     assets: doc.data && doc.data.assets ? doc.data.assets : null,
+    evolutionLinks,
   };
 }
 
@@ -32,7 +45,7 @@ const SLIM_PROJECTION = {
   formId: 1, dexNr: 1, namesEnglish: 1,
   primaryType: 1, secondaryType: 1,
   statsAttack: 1, statsDefense: 1, statsStamina: 1,
-  hasMegaEvolution: 1, 'data.assets': 1,
+  hasMegaEvolution: 1, 'data.assets': 1, 'data.evolutions': 1,
 };
 
 async function handleList() {
