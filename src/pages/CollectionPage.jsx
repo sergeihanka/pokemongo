@@ -146,6 +146,40 @@ const BLANK_FORM = {
   notes: '',
 }
 
+// ---- evolution chain helpers ------------------------------------------------
+
+function getFinalEvos(entry, byFormId, visited = new Set()) {
+  if (!entry) return []
+  const key = entry.formId ?? String(entry.dexNr)
+  if (visited.has(key)) return [entry]
+  visited.add(key)
+  const links = (entry.evolutionLinks ?? []).filter(l => l.formId)
+  if (links.length === 0) return [entry]
+  const results = []
+  for (const link of links) {
+    const next = byFormId.get(link.formId.toUpperCase())
+    results.push(...getFinalEvos(next ?? null, byFormId, new Set(visited)))
+  }
+  return results.length ? results : [entry]
+}
+
+// Returns array of { entry, link } from start to targetFormId (or to first leaf if target not found)
+function getEvoPathTo(start, targetFormId, byFormId, visited = new Set()) {
+  if (!start) return null
+  const key = start.formId ?? String(start.dexNr)
+  if (visited.has(key)) return null
+  visited.add(key)
+  const normalTarget = targetFormId?.toUpperCase()
+  if (start.formId?.toUpperCase() === normalTarget) return [{ entry: start, link: null }]
+  const links = (start.evolutionLinks ?? []).filter(l => l.formId)
+  for (const link of links) {
+    const next = byFormId.get(link.formId.toUpperCase())
+    const sub = getEvoPathTo(next ?? null, targetFormId, byFormId, new Set(visited))
+    if (sub) return [{ entry: start, link }, ...sub]
+  }
+  return null
+}
+
 // ---- sub-components ---------------------------------------------------------
 
 function Label({ children }) {
@@ -504,26 +538,32 @@ const RANK_RING = [
   'bg-[#30363D] text-[#8B949E]',    // 6
 ]
 
-function TeamSlot({ mon, rank, statFn, color }) {
+function TeamSlot({ mon, rank, statFn, color, onSelect, spriteId, displayName, subName }) {
   const isAlt = rank > 6
   const ringStyle = isAlt
     ? 'bg-[#21262D] border border-[#30363D] text-[#484F58]'
     : RANK_RING[rank - 1]
 
   return (
-    <div className={`flex flex-col items-center gap-0.5 flex-shrink-0 w-[54px] ${isAlt ? 'opacity-65' : ''}`}>
+    <div
+      className={`flex flex-col items-center gap-0.5 flex-shrink-0 w-[54px] ${isAlt ? 'opacity-65' : ''} ${onSelect ? 'cursor-pointer active:scale-95 transition-transform' : ''}`}
+      onClick={onSelect ? () => onSelect(mon) : undefined}
+    >
       <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold leading-none ${ringStyle}`}>
         {isAlt ? (rank === 7 ? 'A' : 'B') : rank}
       </span>
       <img
-        src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${mon.pokemonId}.png`}
+        src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${spriteId ?? mon.pokemonId}.png`}
         alt=""
         className="w-10 h-10 object-contain"
         onError={e => { e.target.style.display = 'none' }}
       />
       <p className="text-[9px] font-medium text-[#C9D1D9] truncate w-full text-center leading-tight">
-        {mon.nickname || mon.pokemonName}
+        {displayName ?? (mon.nickname || mon.pokemonName)}
       </p>
+      {subName && (
+        <p className="text-[8px] text-[#484F58] truncate w-full text-center leading-none">{subName}</p>
+      )}
       <p className={`text-[8px] font-mono leading-tight ${color}`}>{statFn(mon)}</p>
       <p className="text-[8px] text-[#484F58] leading-tight">Lv{mon.level ?? '?'} · {ivPercent(mon.ivAttack, mon.ivDefense, mon.ivStamina).toFixed(0)}%</p>
     </div>
@@ -542,7 +582,7 @@ function EmptySlot({ rank }) {
   )
 }
 
-function TeamRoster({ label, color, badge, roster, statFn }) {
+function TeamRoster({ label, color, badge, roster, statFn, getSlotProps }) {
   const main = roster.slice(0, 6)
   const alts = roster.slice(6, 8)
   const emptySlots = Math.max(0, 6 - main.length)
@@ -552,7 +592,7 @@ function TeamRoster({ label, color, badge, roster, statFn }) {
       <p className={`text-[10px] font-bold uppercase tracking-wider ${color}`}>{label}</p>
       <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
         {main.map((mon, i) => (
-          <TeamSlot key={mon._id} mon={mon} rank={i + 1} statFn={statFn} color={color} />
+          <TeamSlot key={mon._id} mon={mon} rank={i + 1} statFn={statFn} color={color} {...(getSlotProps?.(mon) ?? {})} />
         ))}
         {Array.from({ length: emptySlots }).map((_, i) => (
           <EmptySlot key={`empty-${i}`} rank={main.length + i + 1} />
@@ -563,10 +603,93 @@ function TeamRoster({ label, color, badge, roster, statFn }) {
               <div className="h-12 w-px bg-[#30363D]" />
             </div>
             {alts.map((mon, i) => (
-              <TeamSlot key={mon._id} mon={mon} rank={7 + i} statFn={statFn} color={color} />
+              <TeamSlot key={mon._id} mon={mon} rank={7 + i} statFn={statFn} color={color} {...(getSlotProps?.(mon) ?? {})} />
             ))}
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+function EvoPathModal({ target, onClose }) {
+  const { mon, path, statText, color } = target
+  const isAlreadyFinal = path.length === 1
+
+  return (
+    <div className="fixed inset-0 z-[70] flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="relative bg-[#161B22] border-t border-[#30363D] rounded-t-2xl shadow-2xl w-full max-w-lg mx-auto px-5 pt-5 space-y-4"
+        style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+      >
+        {/* Handle bar */}
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 bg-[#30363D] rounded-full" />
+
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-[#E6EDF3]">Evolution Path</h3>
+          <button onClick={onClose} className="text-[#8B949E] hover:text-[#C9D1D9] p-1 transition">✕</button>
+        </div>
+
+        {/* Chain */}
+        {isAlreadyFinal ? (
+          <p className="text-xs text-[#8B949E] text-center py-2">This Pokémon doesn't evolve further.</p>
+        ) : (
+          <div className="flex items-center gap-1 overflow-x-auto py-1" style={{ scrollbarWidth: 'none' }}>
+            {path.map(({ entry, link }, i) => {
+              const isFinal = i === path.length - 1
+              return (
+                <div key={entry.formId ?? entry.dexNr} className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <img
+                      src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${entry.dexNr}.png`}
+                      alt=""
+                      className={`w-14 h-14 object-contain ${isFinal ? '' : 'opacity-60'}`}
+                      onError={e => { e.target.style.display = 'none' }}
+                    />
+                    <p className={`text-[10px] font-medium text-center leading-tight max-w-[60px] ${isFinal ? 'text-[#E6EDF3]' : 'text-[#8B949E]'}`}>
+                      {entry.names?.English ?? entry.formId}
+                    </p>
+                    {isFinal && (
+                      <span className={`text-[9px] font-semibold ${color}`}>Final</span>
+                    )}
+                  </div>
+                  {link && (
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5 px-0.5">
+                      <span className="text-[#484F58] text-sm">→</span>
+                      {link.candies != null && (
+                        <span className="text-[9px] text-[#484F58]">{link.candies}🍬</span>
+                      )}
+                      {link.condition && (
+                        <span className="text-[9px] text-[#8B949E] max-w-[48px] text-center leading-tight">{link.condition}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Caught mon info */}
+        <div className="bg-[#21262D] rounded-xl p-3 flex items-center gap-3">
+          <img
+            src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${mon.pokemonId}.png`}
+            alt=""
+            className="w-10 h-10 object-contain flex-shrink-0"
+            onError={e => { e.target.style.display = 'none' }}
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-[#C9D1D9]">
+              {mon.nickname || mon.pokemonName}
+              {mon.isShiny ? ' ✨' : ''}{mon.isShadow ? ' 👻' : ''}
+            </p>
+            <p className="text-[11px] text-[#8B949E]">
+              IV {mon.ivAttack}/{mon.ivDefense}/{mon.ivStamina} · Lv {mon.level} · CP {mon.cp?.toLocaleString() ?? '?'}
+            </p>
+          </div>
+          <p className={`text-xs font-bold flex-shrink-0 ${color}`}>{statText} at Lv50</p>
+        </div>
       </div>
     </div>
   )
@@ -587,6 +710,7 @@ export default function CollectionPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCsvImporter, setShowCsvImporter] = useState(false)
   const [showDeleteAll, setShowDeleteAll] = useState(false)
+  const [evoPathTarget, setEvoPathTarget] = useState(null)
   const [editTarget, setEditTarget] = useState(null)    // caught pokemon object
   const [deleteTarget, setDeleteTarget] = useState(null) // caught pokemon object
   const [addForm, setAddForm] = useState(BLANK_FORM)
@@ -602,23 +726,44 @@ export default function CollectionPage() {
       collection.reduce((sum, c) => sum + ivPercent(c.ivAttack, c.ivDefense, c.ivStamina), 0) / total
     ).toFixed(1)
 
-    // Build base stat lookup from pokedex (keyed by dexNr)
+    // Build base stat lookup and evolution maps from pokedex
     const baseOf = {}
+    const byFormId = new Map()
+    const byDexNr = new Map()
     for (const p of pokedex) {
-      if (p.dexNr) baseOf[p.dexNr] = {
-        atk: p.baseAttack ?? 0,
-        def: p.baseDefense ?? 0,
-        sta: p.baseStamina ?? 0,
+      if (p.dexNr) {
+        baseOf[p.dexNr] = { atk: p.baseAttack ?? 0, def: p.baseDefense ?? 0, sta: p.baseStamina ?? 0 }
+        byDexNr.set(p.dexNr, p)
       }
+      if (p.formId) byFormId.set(p.formId.toUpperCase(), p)
     }
 
-    // Enrich each catch with effective stats at current level and projected to L50
+    // Enrich each catch with effective stats at current level, projected to L50, and best final evo at L50
     const enriched = collection.map(c => {
       const base = baseOf[c.pokemonId] ?? { atk: 0, def: 0, sta: 0 }
       const lv = Math.max(1, Math.min(50, Number(c.level) || 20))
       const ivAtk = Number(c.ivAttack) || 0
       const ivDef = Number(c.ivDefense) || 0
       const ivSta = Number(c.ivStamina) || 0
+
+      // Evolution chain — find the best final form for each stat axis
+      const currentEntry = byDexNr.get(c.pokemonId)
+      const finals = currentEntry ? getFinalEvos(currentEntry, byFormId) : []
+
+      const bestAtkEvo  = finals.length ? finals.reduce((b, f) => (f?.baseAttack  ?? 0) > (b?.baseAttack  ?? 0) ? f : b) : null
+      const bestBulkEvo = finals.length ? finals.reduce((b, f) =>
+        ((f?.baseDefense ?? 0) * (f?.baseStamina ?? 0)) > ((b?.baseDefense ?? 0) * (b?.baseStamina ?? 0)) ? f : b) : null
+      const bestCPEvo   = finals.length ? finals.reduce((b, f) => {
+        const cpF = f ? calculateCP(f.baseAttack ?? 0, f.baseDefense ?? 0, f.baseStamina ?? 0, ivAtk, ivDef, ivSta, 50) : 0
+        const cpB = b ? calculateCP(b.baseAttack ?? 0, b.baseDefense ?? 0, b.baseStamina ?? 0, ivAtk, ivDef, ivSta, 50) : 0
+        return cpF > cpB ? f : b
+      }) : null
+
+      // Pre-compute evo paths for the modal
+      const evoPathForAtk  = currentEntry && bestAtkEvo  ? (getEvoPathTo(currentEntry, bestAtkEvo.formId,  byFormId) ?? [{ entry: currentEntry, link: null }]) : (currentEntry ? [{ entry: currentEntry, link: null }] : [])
+      const evoPathForBulk = currentEntry && bestBulkEvo ? (getEvoPathTo(currentEntry, bestBulkEvo.formId, byFormId) ?? [{ entry: currentEntry, link: null }]) : (currentEntry ? [{ entry: currentEntry, link: null }] : [])
+      const evoPathForCP   = currentEntry && bestCPEvo   ? (getEvoPathTo(currentEntry, bestCPEvo.formId,   byFormId) ?? [{ entry: currentEntry, link: null }]) : (currentEntry ? [{ entry: currentEntry, link: null }] : [])
+
       return {
         ...c,
         base,
@@ -626,10 +771,17 @@ export default function CollectionPage() {
         effAtk:  effectiveAttack(base.atk, ivAtk, lv),
         effBulk: effectiveDefense(base.def, ivDef, lv) * effectiveStamina(base.sta, ivSta, lv),
         effCP:   calculateCP(base.atk, base.def, base.sta, ivAtk, ivDef, ivSta, lv),
-        // Projected to L50 with same IVs
+        // Projected to L50 with same IVs (no evolution)
         potAtk:  effectiveAttack(base.atk, ivAtk, 50),
         potBulk: effectiveDefense(base.def, ivDef, 50) * effectiveStamina(base.sta, ivSta, 50),
         potCP:   calculateCP(base.atk, base.def, base.sta, ivAtk, ivDef, ivSta, 50),
+        // Projected to L50 with best evolution + same IVs
+        evoAtk:  bestAtkEvo  ? effectiveAttack(bestAtkEvo.baseAttack ?? 0, ivAtk, 50) : effectiveAttack(base.atk, ivAtk, 50),
+        evoBulk: bestBulkEvo ? effectiveDefense(bestBulkEvo.baseDefense ?? 0, ivDef, 50) * effectiveStamina(bestBulkEvo.baseStamina ?? 0, ivSta, 50) : effectiveDefense(base.def, ivDef, 50) * effectiveStamina(base.sta, ivSta, 50),
+        evoCP:   bestCPEvo   ? calculateCP(bestCPEvo.baseAttack ?? 0, bestCPEvo.baseDefense ?? 0, bestCPEvo.baseStamina ?? 0, ivAtk, ivDef, ivSta, 50) : calculateCP(base.atk, base.def, base.sta, ivAtk, ivDef, ivSta, 50),
+        bestAtkEvo, bestBulkEvo, bestCPEvo,
+        evoPathForAtk, evoPathForBulk, evoPathForCP,
+        currentEntry,
       }
     })
 
@@ -640,10 +792,10 @@ export default function CollectionPage() {
     const topAttackers    = topN(enriched, c => c.effAtk)
     const topDefenders    = topN(enriched, c => c.effBulk)
     const topRaiders      = topN(enriched, c => c.effCP)
-    // Highest potential (projected to L50 with current IVs)
-    const potTopAttackers = topN(enriched, c => c.potAtk)
-    const potTopDefenders = topN(enriched, c => c.potBulk)
-    const potTopRaiders   = topN(enriched, c => c.potCP)
+    // Highest potential — projected to L50 with best possible evolution and same IVs
+    const potTopAttackers = topN(enriched, c => c.evoAtk)
+    const potTopDefenders = topN(enriched, c => c.evoBulk)
+    const potTopRaiders   = topN(enriched, c => c.evoCP)
 
     return { total, hundreds, avgIv, topAttackers, topDefenders, topRaiders, potTopAttackers, potTopDefenders, potTopRaiders }
   }, [collection, pokedex])
@@ -764,16 +916,7 @@ export default function CollectionPage() {
           <h1 className="text-2xl font-bold text-[#E6EDF3]">My Collection</h1>
           <p className="text-sm text-[#8B949E] mt-0.5">Track your caught Pokemon and IVs.</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {collection.length > 0 && (
-            <button
-              onClick={() => setShowDeleteAll(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262D] hover:bg-[#DA3633]/20
-                         border border-[#DA3633]/40 text-[#F85149] rounded-xl text-sm font-medium transition"
-            >
-              🗑 Delete All
-            </button>
-          )}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowCsvImporter(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262D] hover:bg-[#30363D]
@@ -791,6 +934,15 @@ export default function CollectionPage() {
             </svg>
             Add Pokemon
           </button>
+          {collection.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAll(true)}
+              className="text-xs text-[#484F58] hover:text-[#F85149] transition px-1 py-1"
+              title="Clear entire collection"
+            >
+              🗑
+            </button>
+          )}
         </div>
       </div>
 
@@ -823,18 +975,42 @@ export default function CollectionPage() {
           roster={stats.topRaiders} statFn={c => `CP ${c.effCP.toLocaleString()}`} />
       </div>
 
-      {/* Highest Potential — projected to L50 */}
+      {/* Highest Potential — projected to L50 with best evolution */}
       <div className="space-y-2">
         <div className="flex items-baseline gap-2">
           <h2 className="text-xs font-semibold text-[#C9D1D9] uppercase tracking-wider">Highest Potential</h2>
-          <span className="text-[10px] text-[#484F58]">projected to Level 50 with current IVs</span>
+          <span className="text-[10px] text-[#484F58]">L50 with best evolution · tap for path</span>
         </div>
         <TeamRoster label="Attacker" color="text-orange-400" badge="border-orange-500/20 bg-orange-500/5"
-          roster={stats.potTopAttackers} statFn={c => `Atk ${c.potAtk.toFixed(0)}`} />
+          roster={stats.potTopAttackers}
+          statFn={c => `Atk ${c.evoAtk.toFixed(0)}`}
+          getSlotProps={mon => ({
+            spriteId:    mon.bestAtkEvo?.dexNr ?? mon.pokemonId,
+            displayName: mon.bestAtkEvo?.names?.English ?? mon.pokemonName,
+            subName:     (mon.bestAtkEvo?.dexNr != null && mon.bestAtkEvo.dexNr !== mon.pokemonId) ? mon.pokemonName : undefined,
+            onSelect: () => setEvoPathTarget({ mon, path: mon.evoPathForAtk, statText: `Atk ${mon.evoAtk.toFixed(0)}`, color: 'text-orange-400' }),
+          })}
+        />
         <TeamRoster label="Defender" color="text-blue-400" badge="border-blue-500/20 bg-blue-500/5"
-          roster={stats.potTopDefenders} statFn={c => `Bulk ${(c.potBulk / 1000).toFixed(0)}k`} />
+          roster={stats.potTopDefenders}
+          statFn={c => `Bulk ${(c.evoBulk / 1000).toFixed(0)}k`}
+          getSlotProps={mon => ({
+            spriteId:    mon.bestBulkEvo?.dexNr ?? mon.pokemonId,
+            displayName: mon.bestBulkEvo?.names?.English ?? mon.pokemonName,
+            subName:     (mon.bestBulkEvo?.dexNr != null && mon.bestBulkEvo.dexNr !== mon.pokemonId) ? mon.pokemonName : undefined,
+            onSelect: () => setEvoPathTarget({ mon, path: mon.evoPathForBulk, statText: `Bulk ${(mon.evoBulk / 1000).toFixed(0)}k`, color: 'text-blue-400' }),
+          })}
+        />
         <TeamRoster label="Raider" color="text-green-400" badge="border-green-500/20 bg-green-500/5"
-          roster={stats.potTopRaiders} statFn={c => `CP ${c.potCP.toLocaleString()}`} />
+          roster={stats.potTopRaiders}
+          statFn={c => `CP ${c.evoCP.toLocaleString()}`}
+          getSlotProps={mon => ({
+            spriteId:    mon.bestCPEvo?.dexNr ?? mon.pokemonId,
+            displayName: mon.bestCPEvo?.names?.English ?? mon.pokemonName,
+            subName:     (mon.bestCPEvo?.dexNr != null && mon.bestCPEvo.dexNr !== mon.pokemonId) ? mon.pokemonName : undefined,
+            onSelect: () => setEvoPathTarget({ mon, path: mon.evoPathForCP, statText: `CP ${mon.evoCP.toLocaleString()}`, color: 'text-green-400' }),
+          })}
+        />
       </div>
 
       {/* Loading */}
@@ -929,6 +1105,11 @@ export default function CollectionPage() {
           onCancel={() => setDeleteTarget(null)}
           isDeleting={deleteMutation.isPending}
         />
+      )}
+
+      {/* Evolution path modal */}
+      {evoPathTarget && (
+        <EvoPathModal target={evoPathTarget} onClose={() => setEvoPathTarget(null)} />
       )}
 
       {/* Delete All confirm */}
