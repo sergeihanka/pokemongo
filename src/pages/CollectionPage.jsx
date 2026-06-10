@@ -467,6 +467,85 @@ function CatchModal({ title, form, onChange, onClose, onSave, isSaving, pokedex,
   )
 }
 
+// ---- team roster components -------------------------------------------------
+
+const RANK_RING = [
+  'bg-yellow-500 text-black',       // 1
+  'bg-[#9CA3AF] text-black',        // 2
+  'bg-orange-600 text-white',       // 3
+  'bg-[#30363D] text-[#8B949E]',    // 4
+  'bg-[#30363D] text-[#8B949E]',    // 5
+  'bg-[#30363D] text-[#8B949E]',    // 6
+]
+
+function TeamSlot({ mon, rank, statFn, color }) {
+  const isAlt = rank > 6
+  const ringStyle = isAlt
+    ? 'bg-[#21262D] border border-[#30363D] text-[#484F58]'
+    : RANK_RING[rank - 1]
+
+  return (
+    <div className={`flex flex-col items-center gap-0.5 flex-shrink-0 w-[54px] ${isAlt ? 'opacity-65' : ''}`}>
+      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold leading-none ${ringStyle}`}>
+        {isAlt ? (rank === 7 ? 'A' : 'B') : rank}
+      </span>
+      <img
+        src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${mon.pokemonId}.png`}
+        alt=""
+        className="w-10 h-10 object-contain"
+        onError={e => { e.target.style.display = 'none' }}
+      />
+      <p className="text-[9px] font-medium text-[#C9D1D9] truncate w-full text-center leading-tight">
+        {mon.nickname || mon.pokemonName}
+      </p>
+      <p className={`text-[8px] font-mono leading-tight ${color}`}>{statFn(mon)}</p>
+      <p className="text-[8px] text-[#484F58] leading-tight">Lv{mon.level ?? '?'} · {ivPercent(mon.ivAttack, mon.ivDefense, mon.ivStamina).toFixed(0)}%</p>
+    </div>
+  )
+}
+
+function EmptySlot({ rank }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-[54px] opacity-25">
+      <span className="w-4 h-4 rounded-full bg-[#21262D] border border-[#30363D] flex items-center justify-center text-[9px] text-[#484F58]">
+        {rank}
+      </span>
+      <div className="w-10 h-10 rounded-full bg-[#21262D] border border-dashed border-[#30363D]" />
+      <p className="text-[9px] text-[#484F58]">Empty</p>
+    </div>
+  )
+}
+
+function TeamRoster({ label, color, badge, roster, statFn }) {
+  const main = roster.slice(0, 6)
+  const alts = roster.slice(6, 8)
+  const emptySlots = Math.max(0, 6 - main.length)
+
+  return (
+    <div className={`border ${badge} rounded-xl p-3 space-y-2`}>
+      <p className={`text-[10px] font-bold uppercase tracking-wider ${color}`}>{label}</p>
+      <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        {main.map((mon, i) => (
+          <TeamSlot key={mon._id} mon={mon} rank={i + 1} statFn={statFn} color={color} />
+        ))}
+        {Array.from({ length: emptySlots }).map((_, i) => (
+          <EmptySlot key={`empty-${i}`} rank={main.length + i + 1} />
+        ))}
+        {alts.length > 0 && (
+          <>
+            <div className="flex-shrink-0 flex items-center px-0.5">
+              <div className="h-12 w-px bg-[#30363D]" />
+            </div>
+            {alts.map((mon, i) => (
+              <TeamSlot key={mon._id} mon={mon} rank={7 + i} statFn={statFn} color={color} />
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ---- main component ---------------------------------------------------------
 
 export default function CollectionPage() {
@@ -523,21 +602,19 @@ export default function CollectionPage() {
       }
     })
 
-    const pick = (arr, scoreFn) => arr.reduce((best, c) => {
-      if (!best) return c
-      return scoreFn(c) > scoreFn(best) ? c : best
-    }, null)
+    const topN = (arr, scoreFn, n = 8) =>
+      [...arr].sort((a, b) => scoreFn(b) - scoreFn(a)).slice(0, n)
 
-    // Best right now (at their current level)
-    const bestAttacker = pick(enriched, c => c.effAtk)
-    const bestDefender = pick(enriched, c => c.effBulk)
-    const bestRaider   = pick(enriched, c => c.effCP)
+    // Best right now (at their current level) — top 6 team + 2 alternates
+    const topAttackers    = topN(enriched, c => c.effAtk)
+    const topDefenders    = topN(enriched, c => c.effBulk)
+    const topRaiders      = topN(enriched, c => c.effCP)
     // Highest potential (projected to L50 with current IVs)
-    const potAttacker  = pick(enriched, c => c.potAtk)
-    const potDefender  = pick(enriched, c => c.potBulk)
-    const potRaider    = pick(enriched, c => c.potCP)
+    const potTopAttackers = topN(enriched, c => c.potAtk)
+    const potTopDefenders = topN(enriched, c => c.potBulk)
+    const potTopRaiders   = topN(enriched, c => c.potCP)
 
-    return { total, hundreds, avgIv, bestAttacker, bestDefender, bestRaider, potAttacker, potDefender, potRaider }
+    return { total, hundreds, avgIv, topAttackers, topDefenders, topRaiders, potTopAttackers, potTopDefenders, potTopRaiders }
   }, [collection, pokedex])
 
   // ---- handlers -------------------------------------------------------------
@@ -652,73 +729,33 @@ export default function CollectionPage() {
         />
       </div>
 
-      {/* Best per role — two rows */}
-      {(() => {
-        function BestCard({ label, stat, mon, color, badge, statKey }) {
-          const statVal = mon ? (
-            statKey === 'effAtk'  ? `Atk ${mon.effAtk?.toFixed(0)}`
-            : statKey === 'effBulk' ? `Bulk ${(mon.effBulk / 1000).toFixed(0)}k`
-            : statKey === 'effCP'   ? `CP ${mon.effCP?.toLocaleString()}`
-            : statKey === 'potAtk'  ? `Atk ${mon.potAtk?.toFixed(0)}`
-            : statKey === 'potBulk' ? `Bulk ${(mon.potBulk / 1000).toFixed(0)}k`
-            : `CP ${mon.potCP?.toLocaleString()}`
-          ) : null
-          return (
-            <div className={`bg-[#21262D] border ${badge} rounded-xl p-3 flex flex-col items-center gap-1 text-center`}>
-              <p className="text-[10px] text-[#8B949E] uppercase tracking-wider leading-tight">{label}</p>
-              {mon ? (
-                <>
-                  <img
-                    src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${mon.pokemonId}.png`}
-                    alt="" className="w-10 h-10 object-contain"
-                    onError={e => { e.target.style.display = 'none' }}
-                  />
-                  <p className="text-xs font-semibold text-[#E6EDF3] truncate w-full leading-tight">{mon.nickname || mon.pokemonName}</p>
-                  <p className={`text-[10px] font-mono ${color}`}>{statVal}</p>
-                  <p className="text-[9px] text-[#484F58]">Lv{mon.level ?? '?'} · {ivPercent(mon.ivAttack, mon.ivDefense, mon.ivStamina).toFixed(0)}%</p>
-                </>
-              ) : (
-                <p className="text-[#484F58] text-sm mt-2">—</p>
-              )}
-            </div>
-          )
-        }
+      {/* Best Right Now — top 6 + 2 alternates per role */}
+      <div className="space-y-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-xs font-semibold text-[#C9D1D9] uppercase tracking-wider">Best Right Now</h2>
+          <span className="text-[10px] text-[#484F58]">ranked by effective stats at current level · scroll for alts</span>
+        </div>
+        <TeamRoster label="Attacker" color="text-orange-400" badge="border-orange-500/20 bg-orange-500/5"
+          roster={stats.topAttackers} statFn={c => `Atk ${c.effAtk.toFixed(0)}`} />
+        <TeamRoster label="Defender" color="text-blue-400" badge="border-blue-500/20 bg-blue-500/5"
+          roster={stats.topDefenders} statFn={c => `Bulk ${(c.effBulk / 1000).toFixed(0)}k`} />
+        <TeamRoster label="Raider" color="text-green-400" badge="border-green-500/20 bg-green-500/5"
+          roster={stats.topRaiders} statFn={c => `CP ${c.effCP.toLocaleString()}`} />
+      </div>
 
-        const rows = [
-          {
-            heading: 'Best Right Now',
-            hint: 'ranked by effective stats at their current level',
-            cards: [
-              { label: 'Attacker', mon: stats.bestAttacker, color: 'text-orange-400', badge: 'border-orange-500/30 bg-orange-500/5', statKey: 'effAtk' },
-              { label: 'Defender', mon: stats.bestDefender, color: 'text-blue-400',   badge: 'border-blue-500/30 bg-blue-500/5',   statKey: 'effBulk' },
-              { label: 'Raider',   mon: stats.bestRaider,   color: 'text-green-400',  badge: 'border-green-500/30 bg-green-500/5',  statKey: 'effCP' },
-            ],
-          },
-          {
-            heading: 'Highest Potential',
-            hint: 'projected to Level 50 with current IVs',
-            cards: [
-              { label: 'Attacker', mon: stats.potAttacker, color: 'text-orange-400', badge: 'border-orange-500/20 bg-orange-500/5', statKey: 'potAtk' },
-              { label: 'Defender', mon: stats.potDefender, color: 'text-blue-400',   badge: 'border-blue-500/20 bg-blue-500/5',   statKey: 'potBulk' },
-              { label: 'Raider',   mon: stats.potRaider,   color: 'text-green-400',  badge: 'border-green-500/20 bg-green-500/5',  statKey: 'potCP' },
-            ],
-          },
-        ]
-
-        return rows.map(({ heading, hint, cards }) => (
-          <div key={heading} className="space-y-1.5">
-            <div className="flex items-baseline gap-2">
-              <h2 className="text-xs font-semibold text-[#C9D1D9] uppercase tracking-wider">{heading}</h2>
-              <span className="text-[10px] text-[#484F58]">{hint}</span>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              {cards.map(c => (
-                <BestCard key={c.label} label={c.label} mon={c.mon} color={c.color} badge={c.badge} statKey={c.statKey} />
-              ))}
-            </div>
-          </div>
-        ))
-      })()}
+      {/* Highest Potential — projected to L50 */}
+      <div className="space-y-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-xs font-semibold text-[#C9D1D9] uppercase tracking-wider">Highest Potential</h2>
+          <span className="text-[10px] text-[#484F58]">projected to Level 50 with current IVs</span>
+        </div>
+        <TeamRoster label="Attacker" color="text-orange-400" badge="border-orange-500/20 bg-orange-500/5"
+          roster={stats.potTopAttackers} statFn={c => `Atk ${c.potAtk.toFixed(0)}`} />
+        <TeamRoster label="Defender" color="text-blue-400" badge="border-blue-500/20 bg-blue-500/5"
+          roster={stats.potTopDefenders} statFn={c => `Bulk ${(c.potBulk / 1000).toFixed(0)}k`} />
+        <TeamRoster label="Raider" color="text-green-400" badge="border-green-500/20 bg-green-500/5"
+          roster={stats.potTopRaiders} statFn={c => `CP ${c.potCP.toLocaleString()}`} />
+      </div>
 
       {/* Loading */}
       {isLoading && (
