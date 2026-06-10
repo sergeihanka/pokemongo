@@ -111,7 +111,7 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
     });
 
     return data;
-  }, [pokemon, filter, sortField, sortDir]);
+  }, [collection, filter, sortField, sortDir]);
 
   const thClass = 'text-left text-xs font-semibold text-[#8B949E] uppercase tracking-wide px-3 py-2 whitespace-nowrap select-none';
   const thClickable = `${thClass} cursor-pointer hover:text-[#C9D1D9] transition-colors`;
@@ -128,7 +128,7 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
           className="flex-1 bg-[#161B22] border border-[#30363D] rounded-lg px-3 py-2 text-sm text-[#C9D1D9] placeholder-[#8B949E] focus:outline-none focus:border-blue-500 transition-colors"
         />
         <span className="text-[#8B949E] text-xs whitespace-nowrap">
-          {rows.length} / {pokemon.length}
+          {rows.length} / {collection.length}
         </span>
       </div>
 
@@ -180,7 +180,7 @@ export default function PokemonTable({ collection = [], onEdit, onDelete, onSele
               const displayName = p.nickname || p.pokemonName || 'Unknown';
               const pct = p.ivPct;
               const pctColorClass = ivColor(pct);
-              const spriteUrl = getSpriteUrl(p.pokemonName, p.dexNr);
+              const spriteUrl = getSpriteUrl(p.pokemonName, p.pokemonId);
 
               return (
                 <tr
