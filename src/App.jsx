@@ -7,6 +7,7 @@ import PokemonDetailPage from './pages/PokemonDetailPage'
 import CollectionPage from './pages/CollectionPage'
 import ComparePage from './pages/ComparePage'
 import TierRankingsPage from './pages/TierRankingsPage'
+import ChatPage from './pages/ChatPage'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
               <Route path="/collection" element={<CollectionPage />} />
               <Route path="/compare" element={<ComparePage />} />
               <Route path="/tiers" element={<TierRankingsPage />} />
+              <Route path="/chat" element={<ChatPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

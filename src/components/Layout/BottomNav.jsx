@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, BookOpen, ArrowLeftRight, Trophy } from 'lucide-react';
+import { Home, BookOpen, ArrowLeftRight, Trophy, MessageCircle } from 'lucide-react';
 
 const TABS = [
   { label: 'Home',       to: '/',           icon: Home,           exact: true },
   { label: 'Collection', to: '/collection', icon: BookOpen },
   { label: 'Compare',    to: '/compare',    icon: ArrowLeftRight },
   { label: 'Tiers',      to: '/tiers',      icon: Trophy },
+  { label: 'Chat',       to: '/chat',       icon: MessageCircle },
 ];
 
 export default function BottomNav() {

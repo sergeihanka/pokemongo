@@ -9,6 +9,7 @@ import {
 import { usePokedex } from '../hooks/usePokemon'
 import PokemonTable from '../components/Collection/PokemonTable'
 import AlbumScanner from '../components/Collection/AlbumScanner'
+import CsvImporter from '../components/Collection/CsvImporter'
 import { useTrainerLevel } from '../context/TrainerLevelContext.jsx'
 import {
   effectiveAttack,
@@ -584,6 +585,7 @@ export default function CollectionPage() {
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAlbumScanner, setShowAlbumScanner] = useState(false)
+  const [showCsvImporter, setShowCsvImporter] = useState(false)
   const [editTarget, setEditTarget] = useState(null)    // caught pokemon object
   const [deleteTarget, setDeleteTarget] = useState(null) // caught pokemon object
   const [addForm, setAddForm] = useState(BLANK_FORM)
@@ -721,6 +723,30 @@ export default function CollectionPage() {
     } catch { /* error handled by hook */ }
   }, [deleteMutation, deleteTarget])
 
+  const handleCsvImport = useCallback(async (results, onProgress) => {
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i]
+      if (!result?.pokemonName) continue
+      try {
+        await addMutation.mutateAsync({
+          pokemonId: result.pokemonId ?? 0,
+          pokemonName: result.pokemonName,
+          nickname: result.nickname || result.pokemonName,
+          cp: Number(result.cp) || 0,
+          ivAttack: Number(result.ivAttack) || 0,
+          ivDefense: Number(result.ivDefense) || 0,
+          ivStamina: Number(result.ivStamina) || 0,
+          level: Number(result.level) || 20,
+          isShiny: result.isShiny || false,
+          isShadow: result.isShadow || false,
+          notes: result.notes || '',
+          caughtDate: result.caughtDate || new Date().toISOString(),
+        })
+      } catch { /* continue */ }
+      onProgress?.(i + 1)
+    }
+  }, [addMutation])
+
   const handleAlbumImport = useCallback(async (results) => {
     for (const result of results) {
       if (!result?.pokemonName) continue
@@ -755,7 +781,14 @@ export default function CollectionPage() {
           <h1 className="text-2xl font-bold text-[#E6EDF3]">My Collection</h1>
           <p className="text-sm text-[#8B949E] mt-0.5">Track your caught Pokemon and IVs.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setShowCsvImporter(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262D] hover:bg-[#30363D]
+                       border border-[#30363D] text-[#C9D1D9] rounded-xl text-sm font-medium transition"
+          >
+            📄 Import CSV
+          </button>
           <button
             onClick={() => setShowAlbumScanner(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#21262D] hover:bg-[#30363D]
@@ -860,6 +893,17 @@ export default function CollectionPage() {
             { state: { collectionMon: p } }
           )}
         />
+      )}
+
+      {/* CSV importer modal */}
+      {showCsvImporter && (
+        <div className="fixed inset-0 z-[61] bg-[#161B22] flex flex-col">
+          <CsvImporter
+            collection={collection}
+            onImport={handleCsvImport}
+            onClose={() => setShowCsvImporter(false)}
+          />
+        </div>
       )}
 
       {/* Album scanner modal */}
