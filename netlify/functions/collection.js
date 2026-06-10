@@ -190,9 +190,23 @@ exports.handler = async function (event) {
 
   // ── DELETE ───────────────────────────────────────────────────────────────────
   if (method === 'DELETE') {
+    const params = event.queryStringParameters || {};
+
+    // DELETE ?all=true — wipe entire collection
+    if (params.all === 'true') {
+      try {
+        const result = await collection.deleteMany({});
+        return response(200, { message: 'Collection cleared', deletedCount: result.deletedCount });
+      } catch (err) {
+        console.error('DELETE all error:', err);
+        return response(500, { error: 'Failed to clear collection', details: err.message });
+      }
+    }
+
+    // DELETE ?id=<id> — delete single entry
     try {
-      const id = (event.queryStringParameters || {}).id;
-      if (!id) return response(400, { error: 'Query param `id` is required' });
+      const id = params.id;
+      if (!id) return response(400, { error: 'Query param `id` or `all=true` is required' });
 
       let objectId;
       try {

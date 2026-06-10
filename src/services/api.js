@@ -237,3 +237,8 @@ export async function deleteCatch(id) {
   const { data } = await axios.delete(`${COLLECTION_ENDPOINT}?id=${id}`);
   return data;
 }
+
+export async function deleteAllCatches() {
+  const { data } = await axios.delete(`${COLLECTION_ENDPOINT}?all=true`);
+  return data;
+}
