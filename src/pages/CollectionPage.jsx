@@ -11,12 +11,7 @@ import { usePokedex } from '../hooks/usePokemon'
 import PokemonTable from '../components/Collection/PokemonTable'
 import CsvImporter from '../components/Collection/CsvImporter'
 import { useTrainerLevel } from '../context/TrainerLevelContext.jsx'
-import {
-  effectiveAttack,
-  effectiveDefense,
-  effectiveStamina,
-  calculateCP,
-} from '../utils/ivCalculator'
+import { enrichCollection, buildRankings } from '../utils/collectionStats'
 
 // ---- screenshot scanner helpers -----------------------------------------------
 
@@ -146,39 +141,7 @@ const BLANK_FORM = {
   notes: '',
 }
 
-// ---- evolution chain helpers ------------------------------------------------
-
-function getFinalEvos(entry, byFormId, visited = new Set()) {
-  if (!entry) return []
-  const key = entry.formId ?? String(entry.dexNr)
-  if (visited.has(key)) return [entry]
-  visited.add(key)
-  const links = (entry.evolutionLinks ?? []).filter(l => l.formId)
-  if (links.length === 0) return [entry]
-  const results = []
-  for (const link of links) {
-    const next = byFormId.get(link.formId.toUpperCase())
-    results.push(...getFinalEvos(next ?? null, byFormId, new Set(visited)))
-  }
-  return results.length ? results : [entry]
-}
-
-// Returns array of { entry, link } from start to targetFormId (or to first leaf if target not found)
-function getEvoPathTo(start, targetFormId, byFormId, visited = new Set()) {
-  if (!start) return null
-  const key = start.formId ?? String(start.dexNr)
-  if (visited.has(key)) return null
-  visited.add(key)
-  const normalTarget = targetFormId?.toUpperCase()
-  if (start.formId?.toUpperCase() === normalTarget) return [{ entry: start, link: null }]
-  const links = (start.evolutionLinks ?? []).filter(l => l.formId)
-  for (const link of links) {
-    const next = byFormId.get(link.formId.toUpperCase())
-    const sub = getEvoPathTo(next ?? null, targetFormId, byFormId, new Set(visited))
-    if (sub) return [{ entry: start, link }, ...sub]
-  }
-  return null
-}
+// Evolution chain helpers are imported from ../utils/collectionStats
 
 // ---- sub-components ---------------------------------------------------------
 
@@ -726,78 +689,10 @@ export default function CollectionPage() {
       collection.reduce((sum, c) => sum + ivPercent(c.ivAttack, c.ivDefense, c.ivStamina), 0) / total
     ).toFixed(1)
 
-    // Build base stat lookup and evolution maps from pokedex
-    const baseOf = {}
-    const byFormId = new Map()
-    const byDexNr = new Map()
-    for (const p of pokedex) {
-      if (p.dexNr) {
-        baseOf[p.dexNr] = { atk: p.baseAttack ?? 0, def: p.baseDefense ?? 0, sta: p.baseStamina ?? 0 }
-        byDexNr.set(p.dexNr, p)
-      }
-      if (p.formId) byFormId.set(p.formId.toUpperCase(), p)
-    }
+    const { enriched } = enrichCollection(collection, pokedex)
+    const rankings = buildRankings(enriched)
 
-    // Enrich each catch with effective stats at current level, projected to L50, and best final evo at L50
-    const enriched = collection.map(c => {
-      const base = baseOf[c.pokemonId] ?? { atk: 0, def: 0, sta: 0 }
-      const lv = Math.max(1, Math.min(50, Number(c.level) || 20))
-      const ivAtk = Number(c.ivAttack) || 0
-      const ivDef = Number(c.ivDefense) || 0
-      const ivSta = Number(c.ivStamina) || 0
-
-      // Evolution chain — find the best final form for each stat axis
-      const currentEntry = byDexNr.get(c.pokemonId)
-      const finals = currentEntry ? getFinalEvos(currentEntry, byFormId) : []
-
-      const bestAtkEvo  = finals.length ? finals.reduce((b, f) => (f?.baseAttack  ?? 0) > (b?.baseAttack  ?? 0) ? f : b) : null
-      const bestBulkEvo = finals.length ? finals.reduce((b, f) =>
-        ((f?.baseDefense ?? 0) * (f?.baseStamina ?? 0)) > ((b?.baseDefense ?? 0) * (b?.baseStamina ?? 0)) ? f : b) : null
-      const bestCPEvo   = finals.length ? finals.reduce((b, f) => {
-        const cpF = f ? calculateCP(f.baseAttack ?? 0, f.baseDefense ?? 0, f.baseStamina ?? 0, ivAtk, ivDef, ivSta, 50) : 0
-        const cpB = b ? calculateCP(b.baseAttack ?? 0, b.baseDefense ?? 0, b.baseStamina ?? 0, ivAtk, ivDef, ivSta, 50) : 0
-        return cpF > cpB ? f : b
-      }) : null
-
-      // Pre-compute evo paths for the modal
-      const evoPathForAtk  = currentEntry && bestAtkEvo  ? (getEvoPathTo(currentEntry, bestAtkEvo.formId,  byFormId) ?? [{ entry: currentEntry, link: null }]) : (currentEntry ? [{ entry: currentEntry, link: null }] : [])
-      const evoPathForBulk = currentEntry && bestBulkEvo ? (getEvoPathTo(currentEntry, bestBulkEvo.formId, byFormId) ?? [{ entry: currentEntry, link: null }]) : (currentEntry ? [{ entry: currentEntry, link: null }] : [])
-      const evoPathForCP   = currentEntry && bestCPEvo   ? (getEvoPathTo(currentEntry, bestCPEvo.formId,   byFormId) ?? [{ entry: currentEntry, link: null }]) : (currentEntry ? [{ entry: currentEntry, link: null }] : [])
-
-      return {
-        ...c,
-        base,
-        // Current level effective stats
-        effAtk:  effectiveAttack(base.atk, ivAtk, lv),
-        effBulk: effectiveDefense(base.def, ivDef, lv) * effectiveStamina(base.sta, ivSta, lv),
-        effCP:   calculateCP(base.atk, base.def, base.sta, ivAtk, ivDef, ivSta, lv),
-        // Projected to L50 with same IVs (no evolution)
-        potAtk:  effectiveAttack(base.atk, ivAtk, 50),
-        potBulk: effectiveDefense(base.def, ivDef, 50) * effectiveStamina(base.sta, ivSta, 50),
-        potCP:   calculateCP(base.atk, base.def, base.sta, ivAtk, ivDef, ivSta, 50),
-        // Projected to L50 with best evolution + same IVs
-        evoAtk:  bestAtkEvo  ? effectiveAttack(bestAtkEvo.baseAttack ?? 0, ivAtk, 50) : effectiveAttack(base.atk, ivAtk, 50),
-        evoBulk: bestBulkEvo ? effectiveDefense(bestBulkEvo.baseDefense ?? 0, ivDef, 50) * effectiveStamina(bestBulkEvo.baseStamina ?? 0, ivSta, 50) : effectiveDefense(base.def, ivDef, 50) * effectiveStamina(base.sta, ivSta, 50),
-        evoCP:   bestCPEvo   ? calculateCP(bestCPEvo.baseAttack ?? 0, bestCPEvo.baseDefense ?? 0, bestCPEvo.baseStamina ?? 0, ivAtk, ivDef, ivSta, 50) : calculateCP(base.atk, base.def, base.sta, ivAtk, ivDef, ivSta, 50),
-        bestAtkEvo, bestBulkEvo, bestCPEvo,
-        evoPathForAtk, evoPathForBulk, evoPathForCP,
-        currentEntry,
-      }
-    })
-
-    const topN = (arr, scoreFn, n = 8) =>
-      [...arr].sort((a, b) => scoreFn(b) - scoreFn(a)).slice(0, n)
-
-    // Best right now (at their current level) — top 6 team + 2 alternates
-    const topAttackers    = topN(enriched, c => c.effAtk)
-    const topDefenders    = topN(enriched, c => c.effBulk)
-    const topRaiders      = topN(enriched, c => c.effCP)
-    // Highest potential — projected to L50 with best possible evolution and same IVs
-    const potTopAttackers = topN(enriched, c => c.evoAtk)
-    const potTopDefenders = topN(enriched, c => c.evoBulk)
-    const potTopRaiders   = topN(enriched, c => c.evoCP)
-
-    return { total, hundreds, avgIv, topAttackers, topDefenders, topRaiders, potTopAttackers, potTopDefenders, potTopRaiders }
+    return { total, hundreds, avgIv, ...rankings }
   }, [collection, pokedex])
 
   // ---- handlers -------------------------------------------------------------

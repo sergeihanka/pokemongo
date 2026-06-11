@@ -2,31 +2,61 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useCollection } from '../hooks/useCollection'
 import { usePokedex } from '../hooks/usePokemon'
 import { useTrainerLevel } from '../context/TrainerLevelContext.jsx'
+import { ivPct, enrichCollection, buildRankings } from '../utils/collectionStats'
 
 // ---- context builder --------------------------------------------------------
 
-function ivPct(a, d, s) {
-  return ((Number(a) || 0) + (Number(d) || 0) + (Number(s) || 0)) / 45 * 100
+function slotLine(c, statLabel, statVal) {
+  const tags = [c.isShiny && '✨Shiny', c.isShadow && '👻Shadow'].filter(Boolean).join(' ')
+  return `  ${c.pokemonName} | IV ${c.ivAttack}/${c.ivDefense}/${c.ivStamina} (${c.ivPctVal?.toFixed(0) ?? ivPct(c.ivAttack, c.ivDefense, c.ivStamina).toFixed(0)}%) | Lv ${c.level} | ${statLabel}: ${statVal}${tags ? ' | ' + tags : ''}`
 }
 
-function buildCollectionContext(collection, trainerLevel) {
+function buildCollectionContext(collection, pokedex, trainerLevel) {
   if (!collection.length) {
     return `COLLECTION: Empty — no Pokémon logged yet.\nTrainer Level: ${trainerLevel}`
   }
 
-  const sorted = [...collection].sort((a, b) => (b.cp ?? 0) - (a.cp ?? 0))
-  const total = sorted.length
-  const hundreds = sorted.filter(c => c.ivAttack === 15 && c.ivDefense === 15 && c.ivStamina === 15).length
-  const avg = (sorted.reduce((s, c) => s + ivPct(c.ivAttack, c.ivDefense, c.ivStamina), 0) / total).toFixed(1)
+  const total = collection.length
+  const hundreds = collection.filter(c => c.ivAttack === 15 && c.ivDefense === 15 && c.ivStamina === 15).length
+  const avg = (collection.reduce((s, c) => s + ivPct(c.ivAttack, c.ivDefense, c.ivStamina), 0) / total).toFixed(1)
+
+  const { enriched } = enrichCollection(collection, pokedex)
+  const rankings = buildRankings(enriched, 6)
 
   let ctx = `TRAINER LEVEL: ${trainerLevel}\n`
   ctx += `COLLECTION SUMMARY: ${total} Pokémon | ${hundreds}× perfect IVs | avg ${avg}% IVs\n\n`
-  ctx += `POKÉMON (sorted by CP):\n`
 
-  // Cap at 150 to keep context tokens reasonable
-  const display = sorted.slice(0, 150)
-  for (const c of display) {
-    const pct = ivPct(c.ivAttack, c.ivDefense, c.ivStamina).toFixed(0)
+  // ---- ranked rosters -------------------------------------------------------
+  ctx += `BEST RIGHT NOW (effective stats at current level):\n`
+  ctx += `Top Attackers:\n`
+  rankings.topAttackers.forEach((c, i) => { ctx += `${i + 1}. ${slotLine(c, 'Eff.Atk', c.effAtk.toFixed(1))}\n` })
+  ctx += `Top Defenders (by bulk):\n`
+  rankings.topDefenders.forEach((c, i) => { ctx += `${i + 1}. ${slotLine(c, 'Bulk', (c.effBulk / 1000).toFixed(1) + 'k')}\n` })
+  ctx += `Top Raiders (by CP):\n`
+  rankings.topRaiders.forEach((c, i) => { ctx += `${i + 1}. ${slotLine(c, 'CP', c.effCP.toLocaleString())}\n` })
+
+  ctx += `\nHIGHEST POTENTIAL (projected to Lv50 with best evolution, same IVs):\n`
+  ctx += `Top Attackers:\n`
+  rankings.potTopAttackers.forEach((c, i) => {
+    const evoNote = c.bestAtkEvo && c.bestAtkEvo.dexNr !== c.pokemonId ? ` → ${c.bestAtkEvo.names?.English}` : ''
+    ctx += `${i + 1}. ${slotLine(c, 'Evo.Atk@L50', c.evoAtk.toFixed(1))}${evoNote}\n`
+  })
+  ctx += `Top Defenders (by bulk):\n`
+  rankings.potTopDefenders.forEach((c, i) => {
+    const evoNote = c.bestBulkEvo && c.bestBulkEvo.dexNr !== c.pokemonId ? ` → ${c.bestBulkEvo.names?.English}` : ''
+    ctx += `${i + 1}. ${slotLine(c, 'Evo.Bulk@L50', (c.evoBulk / 1000).toFixed(1) + 'k')}${evoNote}\n`
+  })
+  ctx += `Top Raiders (by CP):\n`
+  rankings.potTopRaiders.forEach((c, i) => {
+    const evoNote = c.bestCPEvo && c.bestCPEvo.dexNr !== c.pokemonId ? ` → ${c.bestCPEvo.names?.English}` : ''
+    ctx += `${i + 1}. ${slotLine(c, 'Evo.CP@L50', c.evoCP.toLocaleString())}${evoNote}\n`
+  })
+
+  // ---- full collection list -------------------------------------------------
+  ctx += `\nFULL COLLECTION (sorted by CP):\n`
+  const sorted = [...enriched].sort((a, b) => (b.cp ?? 0) - (a.cp ?? 0)).slice(0, 120)
+  for (const c of sorted) {
+    const pct = c.ivPctVal?.toFixed(0) ?? ivPct(c.ivAttack, c.ivDefense, c.ivStamina).toFixed(0)
     const tags = [
       c.isShiny && '✨Shiny',
       c.isShadow && '👻Shadow',
@@ -34,7 +64,7 @@ function buildCollectionContext(collection, trainerLevel) {
     ].filter(Boolean).join(' ')
     ctx += `${c.pokemonName} | #${String(c.pokemonId || '?').padStart(3,'0')} | CP ${c.cp ?? '?'} | Lv ${c.level ?? '?'} | IV ${c.ivAttack ?? '?'}/${c.ivDefense ?? '?'}/${c.ivStamina ?? '?'} (${pct}%)${tags ? ' | ' + tags : ''}\n`
   }
-  if (sorted.length > 150) ctx += `…and ${sorted.length - 150} more Pokémon not shown\n`
+  if (enriched.length > 120) ctx += `…and ${enriched.length - 120} more Pokémon not shown\n`
 
   return ctx
 }
@@ -87,6 +117,7 @@ const STORAGE_KEY = 'pokegosh_chat_messages'
 
 export default function ChatPage() {
   const { data: collection = [] } = useCollection()
+  const { data: pokedex = [] } = usePokedex()
   const [trainerLevel] = useTrainerLevel()
 
   const [messages, setMessages] = useState(() => {
@@ -111,8 +142,8 @@ export default function ChatPage() {
   }, [messages, loading])
 
   const collectionContext = useMemo(
-    () => buildCollectionContext(collection, trainerLevel),
-    [collection, trainerLevel]
+    () => buildCollectionContext(collection, pokedex, trainerLevel),
+    [collection, pokedex, trainerLevel]
   )
 
   const send = useCallback(async () => {
@@ -271,7 +302,7 @@ export default function ChatPage() {
       </div>
 
       <p className="text-center text-[10px] text-[#484F58] mt-2">
-        Your collection is always included as context · "Clear Chat" resets history to save tokens
+        Collection, rankings &amp; evolution potential always included · "Clear Chat" resets history
       </p>
     </div>
   )
