@@ -232,7 +232,7 @@ export default function PokemonTable({ collection = [], pokedex = [], onEdit, on
               return (
                 <tr
                   key={p._id}
-                  onClick={() => onSelect?.(p)}
+                  onClick={() => onSelect?.(p, rows)}
                   className={`border-b border-[#30363D]/50 hover:bg-[#21262D] transition-colors
                     ${isDupe ? 'border-l-2 border-l-orange-500/40' : ''}
                     ${onSelect ? 'cursor-pointer' : ''}`}
