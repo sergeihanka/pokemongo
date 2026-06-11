@@ -944,9 +944,9 @@ export default function CollectionPage() {
           pokedex={pokedex}
           onEdit={openEdit}
           onDelete={c => setDeleteTarget(c)}
-          onSelect={p => navigate(
+          onSelect={(p, rows) => navigate(
             `/pokemon/${encodeURIComponent(p.pokemonName)}`,
-            { state: { collectionMon: p } }
+            { state: { collectionMon: p, collectionIds: rows.map(r => r._id) } }
           )}
         />
       )}

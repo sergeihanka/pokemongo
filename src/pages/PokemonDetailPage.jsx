@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { usePokemonDetail, usePokedex } from '../hooks/usePokemon'
 import { useAddToCollection, useCollection } from '../hooks/useCollection'
@@ -431,6 +431,15 @@ const BLANK_FORM = {
   isShiny: false, isShadow: false, notes: '',
 }
 
+const CIRCLED = ['⓪','❶','❷','❸','❹','❺','❻','❼','❽','❾','❿','⓫','⓬','⓭','⓮','⓯']
+
+function formatPogoName(name, ivAtk, ivDef, ivSta, cp) {
+  const cpStr = String(cp ?? '')
+  const nameLen = Math.max(0, 12 - 3 - cpStr.length)
+  const abbrev = (name ?? '').slice(0, nameLen)
+  return abbrev + (CIRCLED[ivAtk] ?? '') + (CIRCLED[ivDef] ?? '') + (CIRCLED[ivSta] ?? '') + cpStr
+}
+
 // ---- main component ---------------------------------------------------------
 
 export default function PokemonDetailPage() {
@@ -454,6 +463,69 @@ export default function PokemonDetailPage() {
 
   // If navigated from collection, pre-fill that specific mon's IVs and level
   const collectionMon = navState?.collectionMon ?? null
+  const collectionIds = navState?.collectionIds ?? null
+
+  const [copied, setCopied] = useState(false)
+  const touchStartX = useRef(null)
+
+  // Swipe + keyboard navigation through collection
+  const currentIdx = collectionIds && collectionMon
+    ? collectionIds.indexOf(collectionMon._id)
+    : -1
+
+  function navigateToCollectionMon(mon) {
+    navigate(
+      `/pokemon/${encodeURIComponent(mon.pokemonName)}`,
+      { state: { collectionMon: mon, collectionIds }, replace: true }
+    )
+  }
+
+  function goToPrev() {
+    if (currentIdx <= 0) return
+    const prevId = collectionIds[currentIdx - 1]
+    const prev = collection.find(c => c._id === prevId)
+    if (prev) navigateToCollectionMon(prev)
+  }
+
+  function goToNext() {
+    if (currentIdx < 0 || currentIdx >= collectionIds.length - 1) return
+    const nextId = collectionIds[currentIdx + 1]
+    const next = collection.find(c => c._id === nextId)
+    if (next) navigateToCollectionMon(next)
+  }
+
+  useEffect(() => {
+    if (!collectionIds) return
+    function onKey(e) {
+      if (e.key === 'ArrowLeft') goToPrev()
+      else if (e.key === 'ArrowRight') goToNext()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  function handleTouchStart(e) {
+    if (!collectionIds) return
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  function handleTouchEnd(e) {
+    if (!collectionIds || touchStartX.current == null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
+    if (dx > 50) goToPrev()
+    else if (dx < -50) goToNext()
+  }
+
+  function handleCopyName() {
+    if (!collectionMon) return
+    const name = collectionMon.nickname || collectionMon.pokemonName || ''
+    const text = formatPogoName(name, collectionMon.ivAttack, collectionMon.ivDefense, collectionMon.ivStamina, collectionMon.cp)
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   const [activeForm, setActiveForm] = useState('normal') // 'normal' | 'shadow' | 'mega'
   const [ivs, setIvs] = useState(() => ({
@@ -618,17 +690,50 @@ export default function PokemonDetailPage() {
     : `${spriteBase}/${pokemon.dexNr}.png`
 
   return (
-    <div className="space-y-5 max-w-4xl mx-auto">
-      {/* Back nav */}
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-sm text-[#8B949E] hover:text-[#C9D1D9] transition"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to Pokedex
-      </button>
+    <div
+      className="space-y-5 max-w-4xl mx-auto"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Back nav + collection prev/next */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-sm text-[#8B949E] hover:text-[#C9D1D9] transition"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+        {collectionIds && currentIdx >= 0 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={goToPrev}
+              disabled={currentIdx === 0}
+              className="p-1.5 rounded-lg text-[#8B949E] hover:text-[#C9D1D9] hover:bg-[#21262D] disabled:opacity-30 disabled:cursor-not-allowed transition"
+              title="Previous"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <span className="text-[#484F58] text-xs font-mono">
+              {currentIdx + 1}/{collectionIds.length}
+            </span>
+            <button
+              onClick={goToNext}
+              disabled={currentIdx >= collectionIds.length - 1}
+              className="p-1.5 rounded-lg text-[#8B949E] hover:text-[#C9D1D9] hover:bg-[#21262D] disabled:opacity-30 disabled:cursor-not-allowed transition"
+              title="Next"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Hero card */}
       <div className="bg-[#161B22] border border-[#30363D] rounded-2xl overflow-hidden">
@@ -660,9 +765,29 @@ export default function PokemonDetailPage() {
               <p className="text-sm text-[#8B949E] font-mono">
                 #{String(pokemon.dexNr).padStart(3, '0')}
               </p>
-              <h1 className="text-3xl font-bold text-[#E6EDF3] mt-0.5">
-                {displayPokemon.names?.English || pokemon.names?.English}
-              </h1>
+              <div className="flex items-center gap-2 mt-0.5">
+                <h1 className="text-3xl font-bold text-[#E6EDF3]">
+                  {displayPokemon.names?.English || pokemon.names?.English}
+                </h1>
+                {collectionMon && (
+                  <button
+                    onClick={handleCopyName}
+                    title="Copy nickname to clipboard"
+                    className="flex-shrink-0 p-1.5 rounded-lg text-[#8B949E] hover:text-[#58A6FF] hover:bg-[#58A6FF]/10 transition-colors"
+                  >
+                    {copied ? (
+                      <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <rect x="9" y="9" width="13" height="13" rx="2" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
 
               {/* Type badges */}
               <div className="flex gap-2 mt-3">

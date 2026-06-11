@@ -329,7 +329,7 @@ export default function PokemonTable({ collection = [], pokedex = [], onEdit, on
                     <div className="flex items-center gap-1">
                       {onSelect && (
                         <button
-                          onClick={() => onSelect(p)}
+                          onClick={() => onSelect(p, rows)}
                           title="View Stats"
                           className="p-1.5 rounded hover:bg-blue-500/20 text-[#8B949E] hover:text-blue-400 transition-colors"
                         >
