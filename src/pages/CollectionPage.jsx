@@ -575,9 +575,28 @@ function TeamRoster({ label, color, badge, roster, statFn, getSlotProps }) {
   )
 }
 
-function EvoPathModal({ target, onClose }) {
-  const { mon, path, statText, color } = target
-  const isAlreadyFinal = path.length === 1
+const CIRCLED = ['⓪','❶','❷','❸','❹','❺','❻','❼','❽','❾','❿','⓫','⓬','⓭','⓮','⓯']
+
+function formatPogoName(mon) {
+  const name = mon.nickname || mon.pokemonName || ''
+  const cpStr = String(mon.cp ?? '')
+  const nameLen = Math.max(0, 12 - 3 - cpStr.length)
+  return name.slice(0, nameLen) + (CIRCLED[mon.ivAttack] ?? '') + (CIRCLED[mon.ivDefense] ?? '') + (CIRCLED[mon.ivStamina] ?? '') + cpStr
+}
+
+function MonStatsModal({ target, onClose }) {
+  const { mon, statValue, color, path } = target
+  const [copied, setCopied] = useState(false)
+  const pogoName = formatPogoName(mon)
+  const isPotential = Boolean(path)
+  const hasEvoPath = path && path.length > 1
+
+  function copyName() {
+    navigator.clipboard.writeText(pogoName).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col justify-end">
@@ -586,73 +605,130 @@ function EvoPathModal({ target, onClose }) {
         className="relative bg-[#161B22] border-t border-[#30363D] rounded-t-2xl shadow-2xl w-full max-w-lg mx-auto px-5 pt-5 space-y-4"
         style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
       >
-        {/* Handle bar */}
         <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 bg-[#30363D] rounded-full" />
 
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-[#E6EDF3]">Evolution Path</h3>
+          <h3 className="text-sm font-bold text-[#E6EDF3]">
+            {isPotential ? 'Highest Potential' : 'Best Right Now'} — {mon.nickname || mon.pokemonName}
+          </h3>
           <button onClick={onClose} className="text-[#8B949E] hover:text-[#C9D1D9] p-1 transition">✕</button>
         </div>
 
-        {/* Chain */}
-        {isAlreadyFinal ? (
-          <p className="text-xs text-[#8B949E] text-center py-2">This Pokémon doesn't evolve further.</p>
-        ) : (
-          <div className="flex items-center gap-1 overflow-x-auto py-1" style={{ scrollbarWidth: 'none' }}>
-            {path.map(({ entry, link }, i) => {
-              const isFinal = i === path.length - 1
-              return (
-                <div key={entry.formId ?? entry.dexNr} className="flex items-center gap-1 flex-shrink-0">
-                  <div className="flex flex-col items-center gap-0.5">
-                    <img
-                      src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${entry.dexNr}.png`}
-                      alt=""
-                      className={`w-14 h-14 object-contain ${isFinal ? '' : 'opacity-60'}`}
-                      onError={e => { e.target.style.display = 'none' }}
-                    />
-                    <p className={`text-[10px] font-medium text-center leading-tight max-w-[60px] ${isFinal ? 'text-[#E6EDF3]' : 'text-[#8B949E]'}`}>
-                      {entry.names?.English ?? entry.formId}
-                    </p>
-                    {isFinal && (
-                      <span className={`text-[9px] font-semibold ${color}`}>Final</span>
-                    )}
-                  </div>
-                  {link && (
-                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5 px-0.5">
-                      <span className="text-[#484F58] text-sm">→</span>
-                      {link.candies != null && (
-                        <span className="text-[9px] text-[#484F58]">{link.candies}🍬</span>
-                      )}
-                      {link.condition && (
-                        <span className="text-[9px] text-[#8B949E] max-w-[48px] text-center leading-tight">{link.condition}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Caught mon info */}
+        {/* Mon card with PoGO name + copy */}
         <div className="bg-[#21262D] rounded-xl p-3 flex items-center gap-3">
           <img
             src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${mon.pokemonId}.png`}
             alt=""
-            className="w-10 h-10 object-contain flex-shrink-0"
+            className="w-12 h-12 object-contain flex-shrink-0"
             onError={e => { e.target.style.display = 'none' }}
           />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-[#C9D1D9]">
-              {mon.nickname || mon.pokemonName}
-              {mon.isShiny ? ' ✨' : ''}{mon.isShadow ? ' 👻' : ''}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-mono font-bold text-[#E6EDF3]">{pogoName}</span>
+              <button
+                onClick={copyName}
+                className="p-1 rounded text-[#8B949E] hover:text-[#58A6FF] hover:bg-[#58A6FF]/10 transition-colors"
+                title="Copy to clipboard"
+              >
+                {copied ? (
+                  <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <rect x="9" y="9" width="13" height="13" rx="2" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                  </svg>
+                )}
+              </button>
+            </div>
             <p className="text-[11px] text-[#8B949E]">
-              IV {mon.ivAttack}/{mon.ivDefense}/{mon.ivStamina} · Lv {mon.level} · CP {mon.cp?.toLocaleString() ?? '?'}
+              {mon.nickname ? mon.pokemonName + ' · ' : ''}IV {mon.ivAttack}/{mon.ivDefense}/{mon.ivStamina} · Lv {mon.level}{mon.cp ? ` · CP ${mon.cp.toLocaleString()}` : ''}
+            </p>
+            <p className="text-[11px] text-[#484F58]">
+              {ivPercent(mon.ivAttack, mon.ivDefense, mon.ivStamina).toFixed(1)}% IVs
+              {mon.isShiny ? ' · ✨' : ''}{mon.isShadow ? ' · 👻' : ''}
             </p>
           </div>
-          <p className={`text-xs font-bold flex-shrink-0 ${color}`}>{statText} at Lv50</p>
+          <p className={`text-sm font-bold flex-shrink-0 ${color}`}>{statValue}</p>
         </div>
+
+        {/* Ranking stats at current level */}
+        <div>
+          <p className="text-[9px] text-[#484F58] uppercase tracking-wider mb-1.5">
+            {isPotential ? 'Current (your level)' : 'Ranking stats'}
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-[#0D1117] rounded-lg p-2 text-center">
+              <p className="text-[9px] text-[#484F58] uppercase tracking-wider">Eff. Attack</p>
+              <p className="text-sm font-mono font-semibold text-orange-400">{mon.effAtk?.toFixed(1) ?? '—'}</p>
+            </div>
+            <div className="bg-[#0D1117] rounded-lg p-2 text-center">
+              <p className="text-[9px] text-[#484F58] uppercase tracking-wider">Bulk</p>
+              <p className="text-sm font-mono font-semibold text-blue-400">{mon.effBulk ? (mon.effBulk / 1000).toFixed(1) + 'k' : '—'}</p>
+            </div>
+            <div className="bg-[#0D1117] rounded-lg p-2 text-center">
+              <p className="text-[9px] text-[#484F58] uppercase tracking-wider">CP</p>
+              <p className="text-sm font-mono font-semibold text-green-400">{mon.effCP?.toLocaleString() ?? '—'}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* L50 projected / evo stats (potential section only) */}
+        {isPotential && (
+          <div>
+            <p className="text-[9px] text-[#484F58] uppercase tracking-wider mb-1.5">Potential at L50 (best evo)</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-[#0D1117] rounded-lg p-2 text-center border border-orange-500/20">
+                <p className="text-[9px] text-orange-400/70 uppercase tracking-wider">Evo Atk</p>
+                <p className="text-sm font-mono font-semibold text-orange-400">{mon.evoAtk?.toFixed(1) ?? '—'}</p>
+              </div>
+              <div className="bg-[#0D1117] rounded-lg p-2 text-center border border-blue-500/20">
+                <p className="text-[9px] text-blue-400/70 uppercase tracking-wider">Evo Bulk</p>
+                <p className="text-sm font-mono font-semibold text-blue-400">{mon.evoBulk ? (mon.evoBulk / 1000).toFixed(1) + 'k' : '—'}</p>
+              </div>
+              <div className="bg-[#0D1117] rounded-lg p-2 text-center border border-green-500/20">
+                <p className="text-[9px] text-green-400/70 uppercase tracking-wider">Evo CP</p>
+                <p className="text-sm font-mono font-semibold text-green-400">{mon.evoCP?.toLocaleString() ?? '—'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Evolution path */}
+        {hasEvoPath && (
+          <div>
+            <p className="text-[9px] text-[#484F58] uppercase tracking-wider mb-1.5">Evolution Path</p>
+            <div className="flex items-center gap-1 overflow-x-auto py-1" style={{ scrollbarWidth: 'none' }}>
+              {path.map(({ entry, link }, i) => {
+                const isFinal = i === path.length - 1
+                return (
+                  <div key={entry.formId ?? entry.dexNr} className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <img
+                        src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${entry.dexNr}.png`}
+                        alt=""
+                        className={`w-12 h-12 object-contain ${isFinal ? '' : 'opacity-60'}`}
+                        onError={e => { e.target.style.display = 'none' }}
+                      />
+                      <p className={`text-[10px] font-medium text-center leading-tight max-w-[56px] ${isFinal ? 'text-[#E6EDF3]' : 'text-[#8B949E]'}`}>
+                        {entry.names?.English ?? entry.formId}
+                      </p>
+                      {isFinal && <span className={`text-[9px] font-semibold ${color}`}>Target</span>}
+                    </div>
+                    {link && (
+                      <div className="flex flex-col items-center flex-shrink-0 gap-0.5 px-0.5">
+                        <span className="text-[#484F58] text-sm">→</span>
+                        {link.candies != null && <span className="text-[9px] text-[#484F58]">{link.candies}🍬</span>}
+                        {link.condition && <span className="text-[9px] text-[#8B949E] max-w-[48px] text-center leading-tight">{link.condition}</span>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -673,7 +749,7 @@ export default function CollectionPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCsvImporter, setShowCsvImporter] = useState(false)
   const [showDeleteAll, setShowDeleteAll] = useState(false)
-  const [evoPathTarget, setEvoPathTarget] = useState(null)
+  const [monStatsTarget, setMonStatsTarget] = useState(null)
   const [editTarget, setEditTarget] = useState(null)    // caught pokemon object
   const [deleteTarget, setDeleteTarget] = useState(null) // caught pokemon object
   const [addForm, setAddForm] = useState(BLANK_FORM)
@@ -863,11 +939,20 @@ export default function CollectionPage() {
           <span className="text-[10px] text-[#484F58]">ranked by effective stats at current level · scroll for alts</span>
         </div>
         <TeamRoster label="Attacker" color="text-orange-400" badge="border-orange-500/20 bg-orange-500/5"
-          roster={stats.topAttackers} statFn={c => `Atk ${c.effAtk.toFixed(0)}`} />
+          roster={stats.topAttackers} statFn={c => `Atk ${c.effAtk.toFixed(0)}`}
+          getSlotProps={mon => ({
+            onSelect: () => setMonStatsTarget({ mon, statValue: `Atk ${mon.effAtk.toFixed(0)}`, color: 'text-orange-400' }),
+          })} />
         <TeamRoster label="Defender" color="text-blue-400" badge="border-blue-500/20 bg-blue-500/5"
-          roster={stats.topDefenders} statFn={c => `Bulk ${(c.effBulk / 1000).toFixed(0)}k`} />
+          roster={stats.topDefenders} statFn={c => `Bulk ${(c.effBulk / 1000).toFixed(0)}k`}
+          getSlotProps={mon => ({
+            onSelect: () => setMonStatsTarget({ mon, statValue: `Bulk ${(mon.effBulk / 1000).toFixed(0)}k`, color: 'text-blue-400' }),
+          })} />
         <TeamRoster label="Raider" color="text-green-400" badge="border-green-500/20 bg-green-500/5"
-          roster={stats.topRaiders} statFn={c => `CP ${c.effCP.toLocaleString()}`} />
+          roster={stats.topRaiders} statFn={c => `CP ${c.effCP.toLocaleString()}`}
+          getSlotProps={mon => ({
+            onSelect: () => setMonStatsTarget({ mon, statValue: `CP ${mon.effCP.toLocaleString()}`, color: 'text-green-400' }),
+          })} />
       </div>
 
       {/* Highest Potential — projected to L50 with best evolution */}
@@ -883,7 +968,7 @@ export default function CollectionPage() {
             spriteId:    mon.bestAtkEvo?.dexNr ?? mon.pokemonId,
             displayName: mon.bestAtkEvo?.names?.English ?? mon.pokemonName,
             subName:     (mon.bestAtkEvo?.dexNr != null && mon.bestAtkEvo.dexNr !== mon.pokemonId) ? mon.pokemonName : undefined,
-            onSelect: () => setEvoPathTarget({ mon, path: mon.evoPathForAtk, statText: `Atk ${mon.evoAtk.toFixed(0)}`, color: 'text-orange-400' }),
+            onSelect: () => setMonStatsTarget({ mon, statValue: `Atk ${mon.evoAtk.toFixed(0)} @ L50`, color: 'text-orange-400', path: mon.evoPathForAtk }),
           })}
         />
         <TeamRoster label="Defender" color="text-blue-400" badge="border-blue-500/20 bg-blue-500/5"
@@ -893,7 +978,7 @@ export default function CollectionPage() {
             spriteId:    mon.bestBulkEvo?.dexNr ?? mon.pokemonId,
             displayName: mon.bestBulkEvo?.names?.English ?? mon.pokemonName,
             subName:     (mon.bestBulkEvo?.dexNr != null && mon.bestBulkEvo.dexNr !== mon.pokemonId) ? mon.pokemonName : undefined,
-            onSelect: () => setEvoPathTarget({ mon, path: mon.evoPathForBulk, statText: `Bulk ${(mon.evoBulk / 1000).toFixed(0)}k`, color: 'text-blue-400' }),
+            onSelect: () => setMonStatsTarget({ mon, statValue: `Bulk ${(mon.evoBulk / 1000).toFixed(0)}k @ L50`, color: 'text-blue-400', path: mon.evoPathForBulk }),
           })}
         />
         <TeamRoster label="Raider" color="text-green-400" badge="border-green-500/20 bg-green-500/5"
@@ -903,7 +988,7 @@ export default function CollectionPage() {
             spriteId:    mon.bestCPEvo?.dexNr ?? mon.pokemonId,
             displayName: mon.bestCPEvo?.names?.English ?? mon.pokemonName,
             subName:     (mon.bestCPEvo?.dexNr != null && mon.bestCPEvo.dexNr !== mon.pokemonId) ? mon.pokemonName : undefined,
-            onSelect: () => setEvoPathTarget({ mon, path: mon.evoPathForCP, statText: `CP ${mon.evoCP.toLocaleString()}`, color: 'text-green-400' }),
+            onSelect: () => setMonStatsTarget({ mon, statValue: `CP ${mon.evoCP.toLocaleString()} @ L50`, color: 'text-green-400', path: mon.evoPathForCP }),
           })}
         />
       </div>
@@ -1002,9 +1087,9 @@ export default function CollectionPage() {
         />
       )}
 
-      {/* Evolution path modal */}
-      {evoPathTarget && (
-        <EvoPathModal target={evoPathTarget} onClose={() => setEvoPathTarget(null)} />
+      {/* Mon stats modal (Best Right Now + Highest Potential) */}
+      {monStatsTarget && (
+        <MonStatsModal target={monStatsTarget} onClose={() => setMonStatsTarget(null)} />
       )}
 
       {/* Delete All confirm */}
