@@ -4,6 +4,7 @@ import { usePokedex } from '../hooks/usePokemon'
 import PokemonCard from '../components/Pokemon/PokemonCard'
 import IVInput from '../components/IV/IVInput'
 import IVAnalysis from '../components/IV/IVAnalysis'
+import { RARITY_TIERS } from '../constants/rarityData'
 
 // All type names supported by Pokemon GO
 const TYPES = [
@@ -176,6 +177,7 @@ export default function HomePage() {
   const [tab, setTab] = useState('browse') // 'browse' | 'lookup'
   const [search, setSearch] = useState('')
   const [selectedType, setSelectedType] = useState('All')
+  const [selectedRarity, setSelectedRarity] = useState('All')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   const filtered = useMemo(() => {
@@ -193,8 +195,11 @@ export default function HomePage() {
         p.secondaryType?.names?.English === selectedType
       )
     }
+    if (selectedRarity !== 'All') {
+      list = list.filter(p => p.rarity === selectedRarity)
+    }
     return list
-  }, [pokedex, search, selectedType])
+  }, [pokedex, search, selectedType, selectedRarity])
 
   const visible = filtered.slice(0, visibleCount)
 
@@ -209,6 +214,11 @@ export default function HomePage() {
 
   const handleTypeSelect = useCallback(type => {
     setSelectedType(type)
+    setVisibleCount(PAGE_SIZE)
+  }, [])
+
+  const handleRaritySelect = useCallback(rarity => {
+    setSelectedRarity(rarity)
     setVisibleCount(PAGE_SIZE)
   }, [])
 
@@ -291,6 +301,34 @@ export default function HomePage() {
                 </button>
               )
             })}
+          </div>
+
+          {/* Rarity filter chips */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-[10px] text-[#484F58] uppercase tracking-wider font-semibold">Rarity:</span>
+            <button
+              onClick={() => handleRaritySelect('All')}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition border ${
+                selectedRarity === 'All'
+                  ? 'bg-[#238636] text-white border-transparent'
+                  : 'bg-[#21262D] text-[#8B949E] border-[#30363D] hover:text-[#C9D1D9] hover:bg-[#30363D]'
+              }`}
+            >
+              All
+            </button>
+            {Object.entries(RARITY_TIERS).sort((a, b) => a[1].order - b[1].order).map(([key, tier]) => (
+              <button
+                key={key}
+                onClick={() => handleRaritySelect(key)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition border ${
+                  selectedRarity === key
+                    ? `${tier.color} ${tier.bg}`
+                    : 'bg-[#21262D] text-[#8B949E] border-[#30363D] hover:text-[#C9D1D9] hover:bg-[#30363D]'
+                }`}
+              >
+                {tier.label}
+              </button>
+            ))}
           </div>
 
           {/* Results count */}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import TypeBadge from './TypeBadge.jsx';
+import RarityBadge from './RarityBadge.jsx';
 import { normalizeTypeName } from '../../constants/typeColors.js';
 import { calculateMaxCP } from '../../utils/ivCalculator.js';
 
@@ -65,7 +66,12 @@ export default function PokemonCard({ pokemon, onClick, isSelected = false, comp
 
         {/* Name + Dex */}
         <div className="flex-1 min-w-0">
-          <p className="text-[#C9D1D9] font-medium text-sm truncate">{name}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-[#C9D1D9] font-medium text-sm truncate">{name}</p>
+            {pokemon.rarity && pokemon.rarity !== 'common' && (
+              <RarityBadge rarity={pokemon.rarity} size="xs" />
+            )}
+          </div>
           <p className="text-[#8B949E] text-xs">{formatDexNr(pokemon.dexNr)}</p>
         </div>
 
@@ -89,12 +95,15 @@ export default function PokemonCard({ pokemon, onClick, isSelected = false, comp
       onClick={onClick}
       className={`w-full bg-[#161B22] border rounded-xl p-4 text-left transition-all hover:bg-[#1C2128] cursor-pointer ${borderClass}`}
     >
-      {/* Header: Dex number */}
+      {/* Header: Dex number + rarity */}
       <div className="flex justify-between items-start mb-2">
         <span className="text-[#8B949E] text-xs font-mono">{formatDexNr(pokemon.dexNr)}</span>
-        {isSelected && (
-          <span className="text-blue-400 text-xs font-semibold">Selected</span>
-        )}
+        <div className="flex items-center gap-1">
+          {pokemon.rarity && <RarityBadge rarity={pokemon.rarity} size="xs" />}
+          {isSelected && (
+            <span className="text-blue-400 text-xs font-semibold">Selected</span>
+          )}
+        </div>
       </div>
 
       {/* Sprite */}
